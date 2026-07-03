@@ -29,8 +29,8 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-PRICE_BLUE = "#14245F"
-PRICE_BLUE_2 = "#1B2F75"
+PRICE_BLUE = "#10245F"
+PRICE_BLUE_2 = "#142E73"
 PRICE_PINK = "#EC007C"
 PRICE_DARK = "#15172F"
 PRICE_GREEN = "#00B050"
@@ -197,6 +197,40 @@ def norm_text(x):
     s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode("ascii")
     s = re.sub(r"\s+", " ", s)
     return s.upper()
+
+
+
+PROJECT_TIENDAS = [
+    "Iztapalapa", "Vallejo", "Ecatepec", "Toluca", "Arco Norte", "Ixtapaluca",
+    "Querétaro", "Centro", "Olivar", "León", "Puebla", "Puebla Sur",
+    "Aguascalientes", "Veracruz", "Naucalpan", "Miravalle", "Atemajac"
+]
+TIENDA_MAP = {norm_text(t): t for t in PROJECT_TIENDAS}
+# Variantes frecuentes
+TIENDA_MAP.update({
+    "QUERETARO": "Querétaro",
+    "LEON": "León",
+    "PUEBLA SUR": "Puebla Sur",
+    "ARCO NORTE": "Arco Norte",
+    "VALLEJO": "Vallejo",
+    "ECATEPEC": "Ecatepec",
+    "MIRAVALLE": "Miravalle",
+    "PUEBLA": "Puebla",
+})
+
+
+def canon_tienda(x):
+    s = "" if x is None else str(x).strip()
+    if not s or s.upper() == "NAN":
+        return ""
+    n = norm_text(s)
+    if n in TIENDA_MAP:
+        return TIENDA_MAP[n]
+    # Buscar tienda dentro de textos largos como ocurrencia/sucursal
+    for k, v in TIENDA_MAP.items():
+        if k and k in n:
+            return v
+    return s.title()
 
 
 def find_col(df, candidates):
@@ -399,6 +433,111 @@ def apply_styles():
     }}
     div[data-testid="stRadio"] label:has(input:checked) {{
         background:#1B2F75 !important;
+        border-bottom-color:#EC007C !important;
+    }}
+    div[data-testid="stRadio"] label:has(input:checked) * {{
+        color:#FFFFFF !important;
+    }}
+
+
+    /* Ajuste visual ligero estilo tablero ejecutivo */
+    html, body, .stApp {{
+        font-size:14px !important;
+    }}
+    .top-header {{
+        padding:14px 26px !important;
+        grid-template-columns:130px 1fr 420px !important;
+    }}
+    .header-title .small {{
+        font-size:11px !important;
+        letter-spacing:4px !important;
+    }}
+    .header-title .big {{
+        font-size:29px !important;
+        font-weight:900 !important;
+    }}
+    .header-title .sub {{
+        font-size:13px !important;
+    }}
+    .header-card {{
+        padding:10px 13px !important;
+        border-radius:12px !important;
+    }}
+    .header-card div {{
+        font-size:15px !important;
+    }}
+    .section-title {{
+        font-size:25px !important;
+        font-weight:900 !important;
+        letter-spacing:0 !important;
+    }}
+    .section-subtitle {{
+        font-size:13px !important;
+    }}
+    div[data-testid="stMetric"] {{
+        background:#FFFFFF;
+        border:1px solid #D9E2F0;
+        border-radius:16px;
+        padding:14px 16px;
+        box-shadow:0 8px 20px rgba(16,36,95,.06);
+    }}
+    div[data-testid="stMetricLabel"] p {{
+        color:#4B5563 !important;
+        font-size:13px !important;
+        font-weight:700 !important;
+    }}
+    div[data-testid="stMetricValue"] {{
+        color:#1F2937 !important;
+        font-size:28px !important;
+        font-weight:700 !important;
+    }}
+    .panel {{
+        border-radius:15px !important;
+        padding:16px !important;
+        box-shadow:0 8px 20px rgba(16,36,95,.05) !important;
+    }}
+    .panel-title {{
+        font-size:16px !important;
+        font-weight:800 !important;
+    }}
+    /* Pestañas superiores sin puntos, blanco tenue y blanco intenso al seleccionar */
+    div[data-testid="stRadio"] > div {{
+        background:#10245F !important;
+        border-top:4px solid #EC007C !important;
+        border-radius:0 !important;
+        padding:0 !important;
+        gap:0 !important;
+        overflow-x:auto !important;
+        white-space:nowrap !important;
+        flex-wrap:nowrap !important;
+        margin:0 -1.6rem 16px -1.6rem !important;
+        box-shadow:0 8px 18px rgba(16,36,95,.16);
+    }}
+    div[data-testid="stRadio"] label {{
+        background:#10245F !important;
+        color:rgba(255,255,255,.70) !important;
+        padding:14px 22px !important;
+        border-radius:0 !important;
+        border-bottom:4px solid transparent !important;
+        font-weight:800 !important;
+        min-width:max-content !important;
+        font-size:14px !important;
+    }}
+    div[data-testid="stRadio"] label > div:first-child {{
+        display:none !important;
+    }}
+    div[data-testid="stRadio"] label * {{
+        color:rgba(255,255,255,.70) !important;
+        font-weight:800 !important;
+    }}
+    div[data-testid="stRadio"] label:hover {{
+        background:#142E73 !important;
+    }}
+    div[data-testid="stRadio"] label:hover * {{
+        color:rgba(255,255,255,.92) !important;
+    }}
+    div[data-testid="stRadio"] label:has(input:checked) {{
+        background:#142E73 !important;
         border-bottom-color:#EC007C !important;
     }}
     div[data-testid="stRadio"] label:has(input:checked) * {{
@@ -619,7 +758,12 @@ COM_KEYS = ["DEV", "VTA", "VENTA", "COSTO", "MODELO", "ID", "TALLA", "COLOR"]
 
 
 def classify_sheet(name, df):
-    text = " ".join([norm_text(name)] + [norm_text(c) for c in df.columns])
+    nname = norm_text(name)
+    text = " ".join([nname] + [norm_text(c) for c in df.columns])
+    if "PLANTILLA" in nname:
+        return "plantilla"
+    if "RESULTADOS" in nname and "PRODUCT" in nname:
+        return "operacion"
     score_op = sum(k in text for k in OP_KEYS)
     score_co = sum(k in text for k in COM_KEYS)
     if score_co > score_op:
@@ -647,7 +791,7 @@ def normalize_operation(df, sheet_name):
     c_motivo = find_col(df, ["Motivo de ingreso", "Motivo"])
 
     out["Fecha"] = pd.to_datetime(df[c_fecha], errors="coerce") if c_fecha else pd.NaT
-    out["Tienda"] = df[c_tienda].astype(str).str.strip() if c_tienda else ""
+    out["Tienda"] = df[c_tienda].astype(str).map(canon_tienda) if c_tienda else ""
     out["Nombre"] = df[c_nombre].astype(str).str.strip() if c_nombre else ""
     out["Actividad Realizada"] = df[c_actividad].astype(str).str.strip() if c_actividad else ""
     out["Número de Piezas"] = to_number(df[c_piezas]) if c_piezas else 0
@@ -655,6 +799,8 @@ def normalize_operation(df, sheet_name):
     out["Acondicionado"] = to_number(df[c_hab]) if c_hab else 0
     out["Ubicado"] = to_number(df[c_ubi]) if c_ubi else 0
     out["Ocurrencia"] = df[c_ocurrencia].astype(str).str.strip() if c_ocurrencia else ""
+    if c_tienda is None and c_ocurrencia is not None:
+        out["Tienda"] = out["Ocurrencia"].map(canon_tienda)
     out["Área"] = df[c_area].astype(str).str.strip() if c_area else ""
     out["Motivo de ingreso"] = df[c_motivo].astype(str).str.strip() if c_motivo else ""
 
@@ -689,7 +835,7 @@ def normalize_commercial(df, sheet_name):
     c_vta_imp = find_col(df, ["Vta_Imp", "Venta Importe", "Ventas Netas Imp", "Vta Imp"])
 
     out["Fecha"] = pd.to_datetime(df[c_fecha], errors="coerce") if c_fecha else pd.NaT
-    out["Tienda"] = df[c_tienda].astype(str).str.strip() if c_tienda else ""
+    out["Tienda"] = df[c_tienda].astype(str).map(canon_tienda) if c_tienda else ""
     out["ID/Modelo"] = df[c_id].astype(str).str.strip() if c_id else ""
     out["Color"] = df[c_color].astype(str).str.strip() if c_color else ""
     out["Talla"] = df[c_talla].astype(str).str.strip() if c_talla else ""
@@ -895,18 +1041,24 @@ def productividad(op):
 
 
 def operational_table(op, co=None, tiendas_base=None, periodo_label="Día"):
-    # Tabla por tienda de operación. Para Por Día/Semanal/Mensual usamos Resultados de productividad.
-    # Si el comercial trae tienda vacía, no debe crear una fila resumen sin tienda.
     op = op.copy() if op is not None else pd.DataFrame()
+    if not op.empty and "Tienda" in op:
+        op["Tienda"] = op["Tienda"].map(canon_tienda)
+
     tiendas_op = []
     if not op.empty and "Tienda" in op:
-        tiendas_op = [t for t in op["Tienda"].dropna().astype(str).str.strip().tolist() if t and t.upper() != "NAN"]
+        tiendas_op = [canon_tienda(t) for t in op["Tienda"].dropna().astype(str).tolist()]
+        tiendas_op = [t for t in tiendas_op if t and t.upper() != "NAN"]
 
-    tiendas_all = sorted(set((tiendas_base or []) + tiendas_op))
+    base_list = [canon_tienda(t) for t in (tiendas_base or [])]
+    tiendas_all = sorted(set([t for t in base_list + tiendas_op if t]))
+
     rows = []
-
     for t in tiendas_all:
-        ot = op[op["Tienda"].astype(str).str.strip() == str(t).strip()] if not op.empty and "Tienda" in op else pd.DataFrame()
+        if not op.empty and "Tienda" in op:
+            ot = op[op["Tienda"].map(norm_text) == norm_text(t)]
+        else:
+            ot = pd.DataFrame()
 
         ingresos = float(ot["Número de Piezas"].sum()) if not ot.empty and "Número de Piezas" in ot else 0
         acond = float(ot["Acondicionado"].sum()) if not ot.empty and "Acondicionado" in ot else 0
@@ -921,22 +1073,21 @@ def operational_table(op, co=None, tiendas_base=None, periodo_label="Día"):
             "Piezas Ingresadas": ingresos,
             "Piezas Acondicionadas": acond,
             "Piezas Ubicadas": ubic,
-            "Pendientes del día de anteayer": pend_ante,
             "Pendientes de ayer": pend_ayer,
             "% Habilitado": safe_div(acond, base),
             "% Ubicado": safe_div(ubic, base),
+            "Pendientes del día de anteayer": pend_ante,
         })
 
     df = pd.DataFrame(rows)
     if not df.empty:
-        # Quitar tiendas sin dato cuando no vienen de una lista base explícita.
         if not tiendas_base:
             df = df[df[["Piezas Ingresadas", "Piezas Acondicionadas", "Piezas Ubicadas", "Pendientes del día de anteayer"]].sum(axis=1) != 0]
-        # Formato visible
         for c in ["Piezas Ingresadas", "Piezas Acondicionadas", "Piezas Ubicadas", "Pendientes del día de anteayer", "Pendientes de ayer"]:
-            df[c] = df[c].round(0).astype(int)
+            df[c] = df[c].fillna(0).round(0).astype(int)
         for c in ["% Habilitado", "% Ubicado"]:
-            df[c] = df[c].round(1)
+            df[c] = df[c].fillna(0).round(1)
+        df = df[["Tienda", "Piezas Ingresadas", "Piezas Acondicionadas", "Piezas Ubicadas", "Pendientes de ayer", "% Habilitado", "% Ubicado", "Pendientes del día de anteayer"]]
     return df
 
 def add_pending_previous_day(op_all, selected_date):
@@ -948,6 +1099,7 @@ def add_pending_previous_day(op_all, selected_date):
     prev_op = op_all[pd.to_datetime(op_all["Fecha"], errors="coerce").dt.normalize() == prev].copy()
     if prev_op.empty:
         return pd.DataFrame(columns=["Tienda", "Pendiente Anteayer"])
+    prev_op["Tienda"] = prev_op["Tienda"].map(canon_tienda)
     by_prev = prev_op.groupby("Tienda", dropna=False).agg(
         IngresosPrev=("Número de Piezas", "sum"),
         UbicPrev=("Ubicado", "sum"),
@@ -1121,8 +1273,9 @@ except Exception as e:
 
 tiendas = sorted(set([
     t for t in (
-        (op_all["Tienda"].dropna().astype(str).str.strip().tolist() if not op_all.empty and "Tienda" in op_all else [])
-        + (co_all["Tienda"].dropna().astype(str).str.strip().tolist() if not co_all.empty and "Tienda" in co_all else [])
+        PROJECT_TIENDAS
+        + (op_all["Tienda"].dropna().astype(str).map(canon_tienda).tolist() if not op_all.empty and "Tienda" in op_all else [])
+        + (co_all["Tienda"].dropna().astype(str).map(canon_tienda).tolist() if not co_all.empty and "Tienda" in co_all else [])
     )
     if t and t.upper() != "NAN"
 ]))
@@ -1171,6 +1324,10 @@ def dia_anterior():
     op_d = op_all[pd.to_datetime(op_all["Fecha"], errors="coerce").dt.normalize() == d].copy() if not op_all.empty and "Fecha" in op_all else pd.DataFrame()
 
     prev_pend = add_pending_previous_day(op_all, selected_date)
+    if op_d.empty:
+        st.warning("No hay registros operativos para la fecha seleccionada. Selecciona una fecha que exista en el Excel.")
+        if fechas:
+            st.caption("Fechas disponibles más recientes: " + ", ".join([str(f) for f in fechas[-7:]]))
     table = operational_table(op_d, None, tiendas_base=tiendas, periodo_label="Día")
     if not table.empty and not prev_pend.empty:
         table = table.drop(columns=["Pendientes del día de anteayer"], errors="ignore").merge(prev_pend, on="Tienda", how="left")
