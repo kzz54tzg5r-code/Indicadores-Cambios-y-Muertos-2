@@ -1,18 +1,18 @@
-# Indicadores Cambios y Muertos v8.1
+# Indicadores Cambios y Muertos v8.2
 
-Versión de emergencia en un solo archivo para evitar errores `KeyError: core.auth` o `core.utils` por mezcla de archivos en GitHub/Streamlit.
+Ajustes:
+- Mantiene diseño moderno de la página.
+- Pestañas superiores en azul como el ejemplo proporcionado.
+- Estructura de pestañas del proyecto trabajado:
+  Dashboard Ejecutivo, Día Anterior, Reporte Semanal, Reporte Mensual, Conversión,
+  Recuperación Económica, Productividad, Recorridos, Rankings, Macro, Diagnóstico,
+  Configuración y Usuarios.
+- Conserva login obligatorio, usuarios, administrador/consulta, caché y SQLite.
+- Versión single-file para evitar errores de mezcla con carpetas core viejas.
 
-## Qué subir a GitHub
+Subir a GitHub:
+- app.py
+- requirements.txt
+- assets/ si usas logo
 
-Sube sólo:
-- `app.py`
-- `requirements.txt`
-- carpeta `assets/` si tienes logo
-
-Puedes borrar carpetas `core/`, `pages/`, versiones anteriores y archivos viejos.
-
-## Acceso inicial técnico
-- Usuario: `admin`
-- Contraseña: `admin123`
-
-Después entra a Usuarios y crea los accesos reales.
+Recomendado: borrar versiones viejas, carpetas core y archivos duplicados antes de subir.

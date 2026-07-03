@@ -281,17 +281,41 @@ def apply_styles():
     .header-card div {{ color:{PRICE_BLUE}; font-size:17px; font-weight:950; margin-top:3px; }}
 
     div[data-testid="stSegmentedControl"] {{
-        background:{PRICE_BLUE}; border-top:4px solid {PRICE_PINK}; padding:0;
-        margin:0 -1.6rem 22px -1.6rem; overflow-x:auto; white-space:nowrap; display:block;
+        background:{PRICE_BLUE};
+        border-top:4px solid {PRICE_PINK};
+        padding:0;
+        margin:0 -1.6rem 22px -1.6rem;
+        overflow-x:auto;
+        white-space:nowrap;
+        display:block;
         box-shadow:0 10px 22px rgba(29,46,110,.18);
+        border-radius:0 !important;
+    }}
+    div[data-testid="stSegmentedControl"] > div {{
+        gap:0 !important;
+        background:{PRICE_BLUE} !important;
+        border-radius:0 !important;
     }}
     div[data-testid="stSegmentedControl"] button {{
-        border-radius:0 !important; border:none !important; background:{PRICE_BLUE} !important;
-        color:#DDE8FF !important; padding:15px 23px !important; font-weight:900 !important;
-        font-size:15px !important; border-bottom:4px solid transparent !important; white-space:nowrap !important;
+        border-radius:0 !important;
+        border:none !important;
+        background:{PRICE_BLUE} !important;
+        color:#DDE8FF !important;
+        padding:15px 24px !important;
+        font-weight:900 !important;
+        font-size:15px !important;
+        border-bottom:4px solid transparent !important;
+        white-space:nowrap !important;
+        box-shadow:none !important;
+    }}
+    div[data-testid="stSegmentedControl"] button:hover {{
+        background:#233B86 !important;
+        color:white !important;
     }}
     div[data-testid="stSegmentedControl"] button[aria-pressed="true"] {{
-        color:white !important; background:#233B86 !important; border-bottom-color:{PRICE_PINK} !important;
+        color:white !important;
+        background:#233B86 !important;
+        border-bottom-color:{PRICE_PINK} !important;
     }}
 
     .section-title {{ color:{PRICE_DARK}; font-size:31px; line-height:1.05; font-weight:950; margin:10px 0 6px 0; }}
@@ -394,15 +418,37 @@ def login_screen():
 
 
 def nav_bar():
-    items = ["Resumen", "Día Anterior", "Reporte Semanal", "Reporte Mensual", "Conversión", "Recuperación Económica",
-             "Productividad", "Recorridos", "Ranking", "Macro", "Criterios", "Configuración", "Usuarios"]
+    items = [
+        "Dashboard Ejecutivo",
+        "Día Anterior",
+        "Reporte Semanal",
+        "Reporte Mensual",
+        "Conversión",
+        "Recuperación Económica",
+        "Productividad",
+        "Recorridos",
+        "Rankings",
+        "Macro",
+        "Diagnóstico",
+        "Configuración",
+        "Usuarios",
+    ]
+
     if "page" not in st.session_state:
-        st.session_state.page = "Resumen"
-    current = st.session_state.page if st.session_state.page in items else "Resumen"
-    selected = st.segmented_control("Navegación", items, default=current, label_visibility="collapsed", key="page_selector")
+        st.session_state.page = "Dashboard Ejecutivo"
+
+    current = st.session_state.page if st.session_state.page in items else "Dashboard Ejecutivo"
+
+    selected = st.segmented_control(
+        "Pestañas",
+        items,
+        default=current,
+        label_visibility="collapsed",
+        key="page_selector"
+    )
+
     st.session_state.page = selected or current
     return st.session_state.page
-
 
 def section(title, subtitle=""):
     st.markdown(f'<div class="section-title">{title}</div><div class="section-subtitle">{subtitle}</div>', unsafe_allow_html=True)
@@ -421,14 +467,30 @@ def kpi_card(label, value, icon, color, note="", pct=0, delta=""):
 
 
 def kpis(resumen):
-    st.markdown('<div class="kpi-grid">', unsafe_allow_html=True)
-    kpi_card("Piezas Ingresadas", fmt_num(resumen.get("Ingresos", 0)), "↻", PRICE_PINK, "Dev + muertos + cajas + probador", 100)
-    kpi_card("Piezas Acondicionadas", fmt_num(resumen.get("Acondicionado", 0)), "✓", PRICE_BLUE, fmt_pct(resumen.get("% Acondicionado", 0)) + " vs ingresos", resumen.get("% Acondicionado", 0))
-    kpi_card("Piezas Ubicadas", fmt_num(resumen.get("Ubicado", 0)), "⌖", PRICE_ORANGE, fmt_pct(resumen.get("% Ubicado", 0)) + " vs ingresos", resumen.get("% Ubicado", 0))
-    kpi_card("Pendientes por Ubicar", fmt_num(resumen.get("Pendiente", 0)), "⌛", PRICE_GREEN, "Ingreso - ubicado", 100 - resumen.get("% Ubicado", 0))
-    kpi_card("% Procesado", fmt_pct(resumen.get("% Ubicado", 0)), "%", PRICE_PURPLE, "Ubicado / ingresadas", resumen.get("% Ubicado", 0))
-    st.markdown('</div>', unsafe_allow_html=True)
+    cards = [
+        ("Piezas Ingresadas", fmt_num(resumen.get("Ingresos", 0)), "↻", PRICE_PINK, "Dev + muertos + cajas + probador", 100, ""),
+        ("Piezas Acondicionadas", fmt_num(resumen.get("Acondicionado", 0)), "✓", PRICE_BLUE, fmt_pct(resumen.get("% Acondicionado", 0)) + " vs ingresos", resumen.get("% Acondicionado", 0), ""),
+        ("Piezas Ubicadas", fmt_num(resumen.get("Ubicado", 0)), "⌖", PRICE_ORANGE, fmt_pct(resumen.get("% Ubicado", 0)) + " vs ingresos", resumen.get("% Ubicado", 0), ""),
+        ("Pendientes por Ubicar", fmt_num(resumen.get("Pendiente", 0)), "⌛", PRICE_GREEN, "Ingreso - ubicado", 100 - resumen.get("% Ubicado", 0), ""),
+        ("% Procesado", fmt_pct(resumen.get("% Ubicado", 0)), "%", PRICE_PURPLE, "Ubicado / ingresadas", resumen.get("% Ubicado", 0), ""),
+    ]
 
+    html = '<div class="kpi-grid">'
+    for label, value, icon, color, note, pct, delta in cards:
+        html += f"""
+        <div class="kpi-card" style="--accent:{color};--soft:{color}18;--shadow:{color}38;">
+            <div class="kpi-top">
+                <div class="kpi-icon">{icon}</div>
+                <div class="kpi-label">{label}</div>
+            </div>
+            <div class="kpi-value">{value}</div>
+            <div class="kpi-note">{note}</div>
+            <div class="progress"><div style="--pct:{pct_clip(pct)}%;"></div></div>
+            {f'<div class="delta">{delta}</div>' if delta else ''}
+        </div>
+        """
+    html += "</div>"
+    st.markdown(html, unsafe_allow_html=True)
 
 def hero(resumen, tiendas_count=0):
     st.markdown(f"""
@@ -899,6 +961,8 @@ goals = load_goals()
 
 def dashboard():
     hero(resumen, len(detalle) if detalle is not None else 0)
+    if detalle is not None and detalle.empty:
+        st.warning("No hay información para la tienda/filtro seleccionado. Cambia el filtro o revisa que la tienda exista igual en el Excel.")
     kpis(resumen)
     section("Últimas 4 semanas", "Ingresos vs semana anterior, % habilitado y % ubicado sobre ingresos.")
     week_cards(sem_df)
@@ -1045,7 +1109,7 @@ def recorridos_page():
 
 
 def ranking_page():
-    section("Ranking", "Top y bottom tiendas / colaboradores.")
+    section("Rankings", "Top y bottom tiendas / colaboradores.")
     a, b = st.columns(2)
     with a:
         rank_panel("Top tiendas por ingresos", detalle, "Ingresos", "Tienda", PRICE_BLUE)
@@ -1061,7 +1125,7 @@ def macro_page():
 
 
 def criterios_page():
-    section("Criterios", "Diagnóstico y validación del archivo.")
+    section("Diagnóstico", "Diagnóstico y validación del archivo.")
     panel("Hojas detectadas", diag_df, height=320)
     with st.expander("Ver columnas normalizadas"):
         st.write("Operación:", list(op_all.columns))
@@ -1169,7 +1233,7 @@ def usuarios_page():
 
 
 ROUTES = {
-    "Resumen": dashboard,
+    "Dashboard Ejecutivo": dashboard,
     "Día Anterior": dia_anterior,
     "Reporte Semanal": reporte_semanal,
     "Reporte Mensual": reporte_mensual,
@@ -1177,9 +1241,9 @@ ROUTES = {
     "Recuperación Económica": recuperacion,
     "Productividad": productividad_page,
     "Recorridos": recorridos_page,
-    "Ranking": ranking_page,
+    "Rankings": ranking_page,
     "Macro": macro_page,
-    "Criterios": criterios_page,
+    "Diagnóstico": criterios_page,
     "Configuración": configuracion_page,
     "Usuarios": usuarios_page,
 }
