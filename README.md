@@ -1,12 +1,18 @@
-# Indicadores Cambios y Muertos v8
+# Indicadores Cambios y Muertos v8.1
 
-Cambios principales:
-- Login profesional sin mostrar credenciales por defecto.
-- Leyenda de acceso: "Para visualizar, inicia sesión con un usuario autorizado".
-- Usuarios y metas guardados en SQLite.
-- El Excel se normaliza una sola vez por versión de archivo usando `st.cache_data`.
-- Al cambiar de pestaña ya no debe quedarse en "Normalizando archivo...".
-- Administrador puede crear, editar, eliminar usuarios y cambiar contraseñas.
-- Sólo usuarios existentes pueden visualizar la información.
+Versión de emergencia en un solo archivo para evitar errores `KeyError: core.auth` o `core.utils` por mezcla de archivos en GitHub/Streamlit.
 
-Nota: usuario inicial de arranque técnico: `admin` / `admin123`. Se recomienda entrar como administrador y crear usuarios reales.
+## Qué subir a GitHub
+
+Sube sólo:
+- `app.py`
+- `requirements.txt`
+- carpeta `assets/` si tienes logo
+
+Puedes borrar carpetas `core/`, `pages/`, versiones anteriores y archivos viejos.
+
+## Acceso inicial técnico
+- Usuario: `admin`
+- Contraseña: `admin123`
+
+Después entra a Usuarios y crea los accesos reales.
