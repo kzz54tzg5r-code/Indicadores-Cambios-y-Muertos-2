@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from datetime import datetime
+from zoneinfo import ZoneInfo
 import sqlite3
 import json
 import io
@@ -380,18 +381,27 @@ def apply_styles():
     }}
     div[data-testid="stRadio"] label {{
         background:#14245F !important;
-        color:#DDE8FF !important;
-        padding:14px 24px !important;
+        color:rgba(255,255,255,.68) !important;
+        padding:15px 24px !important;
         border-radius:0 !important;
         border-bottom:4px solid transparent !important;
         font-weight:900 !important;
         min-width:max-content !important;
     }}
+    div[data-testid="stRadio"] label * {{
+        color:rgba(255,255,255,.68) !important;
+    }}
     div[data-testid="stRadio"] label:hover {{
         background:#1B2F75 !important;
-        color:white !important;
     }}
-    div[data-testid="stRadio"] input:checked + div {{
+    div[data-testid="stRadio"] label:hover * {{
+        color:rgba(255,255,255,.90) !important;
+    }}
+    div[data-testid="stRadio"] label:has(input:checked) {{
+        background:#1B2F75 !important;
+        border-bottom-color:#EC007C !important;
+    }}
+    div[data-testid="stRadio"] label:has(input:checked) * {{
         color:#FFFFFF !important;
     }}
 
@@ -417,7 +427,7 @@ def logo_html():
 
 
 def header(user):
-    now = datetime.now()
+    now = datetime.now(ZoneInfo("America/Mexico_City"))
     st.markdown(f"""
     <div class="top-header">
         <div>{logo_html()}</div>
@@ -884,27 +894,28 @@ def productividad(op):
 
 
 
-def operational_table(op, co, tiendas_base=None, periodo_label="Día"):
-    # Tabla por tienda: ingresos, acondicionadas, ubicadas, pendientes anteayer, pendientes ayer,
-    # % habilitado, % ubicado. Si co trae Dev_Pzs se usa como ingreso, si no operación.
-    tiendas_all = sorted(set(
-        (tiendas_base or [])
-        + (op["Tienda"].dropna().astype(str).tolist() if op is not None and not op.empty and "Tienda" in op else [])
-        + (co["Tienda"].dropna().astype(str).tolist() if co is not None and not co.empty and "Tienda" in co else [])
-    ))
-    rows = []
-    for t in tiendas_all:
-        ot = op[op["Tienda"] == t] if op is not None and not op.empty and "Tienda" in op else pd.DataFrame()
-        ct = co[co["Tienda"] == t] if co is not None and not co.empty and "Tienda" in co else pd.DataFrame()
+def operational_table(op, co=None, tiendas_base=None, periodo_label="Día"):
+    # Tabla por tienda de operación. Para Por Día/Semanal/Mensual usamos Resultados de productividad.
+    # Si el comercial trae tienda vacía, no debe crear una fila resumen sin tienda.
+    op = op.copy() if op is not None else pd.DataFrame()
+    tiendas_op = []
+    if not op.empty and "Tienda" in op:
+        tiendas_op = [t for t in op["Tienda"].dropna().astype(str).str.strip().tolist() if t and t.upper() != "NAN"]
 
-        ingresos = float(ct["Dev_Pzs"].sum()) if not ct.empty and "Dev_Pzs" in ct and float(ct["Dev_Pzs"].sum()) > 0 else (float(ot["Número de Piezas"].sum()) if not ot.empty and "Número de Piezas" in ot else 0)
+    tiendas_all = sorted(set((tiendas_base or []) + tiendas_op))
+    rows = []
+
+    for t in tiendas_all:
+        ot = op[op["Tienda"].astype(str).str.strip() == str(t).strip()] if not op.empty and "Tienda" in op else pd.DataFrame()
+
+        ingresos = float(ot["Número de Piezas"].sum()) if not ot.empty and "Número de Piezas" in ot else 0
         acond = float(ot["Acondicionado"].sum()) if not ot.empty and "Acondicionado" in ot else 0
         ubic = float(ot["Ubicado"].sum()) if not ot.empty and "Ubicado" in ot else 0
-
-        # Pendientes de anteayer: si existe histórico antes del periodo actual, se calcula fuera en páginas por día.
         pend_ante = float(ot["Pendiente Anteayer"].sum()) if not ot.empty and "Pendiente Anteayer" in ot else 0
+
         base = ingresos + pend_ante
         pend_ayer = max(base - ubic, 0)
+
         rows.append({
             "Tienda": t,
             "Piezas Ingresadas": ingresos,
@@ -915,18 +926,28 @@ def operational_table(op, co, tiendas_base=None, periodo_label="Día"):
             "% Habilitado": safe_div(acond, base),
             "% Ubicado": safe_div(ubic, base),
         })
-    return pd.DataFrame(rows)
 
+    df = pd.DataFrame(rows)
+    if not df.empty:
+        # Quitar tiendas sin dato cuando no vienen de una lista base explícita.
+        if not tiendas_base:
+            df = df[df[["Piezas Ingresadas", "Piezas Acondicionadas", "Piezas Ubicadas", "Pendientes del día de anteayer"]].sum(axis=1) != 0]
+        # Formato visible
+        for c in ["Piezas Ingresadas", "Piezas Acondicionadas", "Piezas Ubicadas", "Pendientes del día de anteayer", "Pendientes de ayer"]:
+            df[c] = df[c].round(0).astype(int)
+        for c in ["% Habilitado", "% Ubicado"]:
+            df[c] = df[c].round(1)
+    return df
 
 def add_pending_previous_day(op_all, selected_date):
-    # Para Por Día: pendiente anteayer = ingresos acumulados del día anterior al seleccionado menos ubicadas de ese día anterior.
-    if op_all is None or op_all.empty or "Fecha" not in op_all:
-        return pd.DataFrame()
+    # Para Por Día: pendiente anteayer = ingresos del día anterior al seleccionado - ubicadas del día anterior.
+    if op_all is None or op_all.empty or "Fecha" not in op_all or "Tienda" not in op_all:
+        return pd.DataFrame(columns=["Tienda", "Pendiente Anteayer"])
     d = pd.to_datetime(selected_date).normalize()
     prev = d - pd.Timedelta(days=1)
     prev_op = op_all[pd.to_datetime(op_all["Fecha"], errors="coerce").dt.normalize() == prev].copy()
     if prev_op.empty:
-        return pd.DataFrame()
+        return pd.DataFrame(columns=["Tienda", "Pendiente Anteayer"])
     by_prev = prev_op.groupby("Tienda", dropna=False).agg(
         IngresosPrev=("Número de Piezas", "sum"),
         UbicPrev=("Ubicado", "sum"),
@@ -934,6 +955,12 @@ def add_pending_previous_day(op_all, selected_date):
     by_prev["Pendiente Anteayer"] = (by_prev["IngresosPrev"] - by_prev["UbicPrev"]).clip(lower=0)
     return by_prev[["Tienda", "Pendiente Anteayer"]]
 
+
+def attach_pending_to_day(op_d, prev_pend):
+    # No se pega a cada fila porque se multiplicaría. Se usa sólo para tabla agregada.
+    if op_d is None or op_d.empty:
+        return op_d
+    return op_d.copy()
 
 def combined_chart(df, title):
     if df is None or df.empty:
@@ -1092,10 +1119,13 @@ except Exception as e:
     st.exception(e)
     st.stop()
 
-tiendas = sorted(set(
-    (op_all["Tienda"].dropna().astype(str).tolist() if not op_all.empty and "Tienda" in op_all else [])
-    + (co_all["Tienda"].dropna().astype(str).tolist() if not co_all.empty and "Tienda" in co_all else [])
-))
+tiendas = sorted(set([
+    t for t in (
+        (op_all["Tienda"].dropna().astype(str).str.strip().tolist() if not op_all.empty and "Tienda" in op_all else [])
+        + (co_all["Tienda"].dropna().astype(str).str.strip().tolist() if not co_all.empty and "Tienda" in co_all else [])
+    )
+    if t and t.upper() != "NAN"
+]))
 
 op_base, co_base, op, co = op_all.copy(), co_all.copy(), op_all.copy(), co_all.copy()
 
@@ -1134,20 +1164,34 @@ def dashboard():
 def dia_anterior():
     section("Por Día", "Ingresos, pendientes y avance por tienda.")
     fechas = sorted(pd.to_datetime(op_all["Fecha"], errors="coerce").dropna().dt.date.unique().tolist()) if not op_all.empty and "Fecha" in op_all else []
-    default_date = fechas[-1] if fechas else datetime.now().date()
+    default_date = fechas[-1] if fechas else datetime.now(ZoneInfo("America/Mexico_City")).date()
     selected_date = st.date_input("Fecha", value=default_date)
 
     d = pd.to_datetime(selected_date).normalize()
     op_d = op_all[pd.to_datetime(op_all["Fecha"], errors="coerce").dt.normalize() == d].copy() if not op_all.empty and "Fecha" in op_all else pd.DataFrame()
-    co_d = co_all[pd.to_datetime(co_all["Fecha"], errors="coerce").dt.normalize() == d].copy() if not co_all.empty and "Fecha" in co_all else pd.DataFrame()
 
     prev_pend = add_pending_previous_day(op_all, selected_date)
-    if not op_d.empty and not prev_pend.empty:
-        op_d = op_d.merge(prev_pend, on="Tienda", how="left")
-        op_d["Pendiente Anteayer"] = op_d["Pendiente Anteayer"].fillna(0)
+    table = operational_table(op_d, None, tiendas_base=tiendas, periodo_label="Día")
+    if not table.empty and not prev_pend.empty:
+        table = table.drop(columns=["Pendientes del día de anteayer"], errors="ignore").merge(prev_pend, on="Tienda", how="left")
+        table["Pendiente Anteayer"] = table["Pendiente Anteayer"].fillna(0)
+        table = table.rename(columns={"Pendiente Anteayer": "Pendientes del día de anteayer"})
+        base = table["Piezas Ingresadas"] + table["Pendientes del día de anteayer"]
+        table["Pendientes de ayer"] = (base - table["Piezas Ubicadas"]).clip(lower=0).round(0).astype(int)
+        table["% Habilitado"] = [safe_div(a, b) for a, b in zip(table["Piezas Acondicionadas"], base)]
+        table["% Ubicado"] = [safe_div(u, b) for u, b in zip(table["Piezas Ubicadas"], base)]
+        table["% Habilitado"] = table["% Habilitado"].round(1)
+        table["% Ubicado"] = table["% Ubicado"].round(1)
 
-    table = operational_table(op_d, co_d, tiendas_base=tiendas, periodo_label="Día")
-    res = resumen_ejecutivo(op_d, co_d)
+    res = {
+        "Ingresos": table["Piezas Ingresadas"].sum() if not table.empty else 0,
+        "Acondicionado": table["Piezas Acondicionadas"].sum() if not table.empty else 0,
+        "Ubicado": table["Piezas Ubicadas"].sum() if not table.empty else 0,
+    }
+    res["Pendiente"] = max(res["Ingresos"] - res["Ubicado"], 0)
+    res["% Acondicionado"] = safe_div(res["Acondicionado"], res["Ingresos"])
+    res["% Ubicado"] = safe_div(res["Ubicado"], res["Ingresos"])
+
     kpis(res)
     pdf_placeholder("Reporte Por Dia")
     panel("Tabla por tienda - Por Día", table, height=390, editable=is_admin)
@@ -1156,10 +1200,7 @@ def dia_anterior():
 
 def reporte_semanal():
     section("Reporte Semanal", "Misma estructura de Por Día, filtrada por tienda y Semana ISO.")
-    semanas = sorted(set(
-        (op_all["Semana ISO"].dropna().astype(int).tolist() if not op_all.empty and "Semana ISO" in op_all else [])
-        + (co_all["Semana ISO"].dropna().astype(int).tolist() if not co_all.empty and "Semana ISO" in co_all else [])
-    ))
+    semanas = sorted(op_all["Semana ISO"].dropna().astype(int).unique().tolist()) if not op_all.empty and "Semana ISO" in op_all else []
     c1, c2 = st.columns([2, 2])
     with c1:
         f_tiendas = st.multiselect("Tiendas", tiendas, placeholder="Todas las tiendas", key="sem_tiendas")
@@ -1167,16 +1208,22 @@ def reporte_semanal():
         f_sem = st.multiselect("Semana ISO", semanas, default=semanas[-1:] if semanas else [], key="sem_semanas")
 
     op_s = op_all.copy()
-    co_s = co_all.copy()
-    if f_tiendas:
-        op_s = op_s[op_s["Tienda"].isin(f_tiendas)] if not op_s.empty and "Tienda" in op_s else op_s
-        co_s = co_s[co_s["Tienda"].isin(f_tiendas)] if not co_s.empty and "Tienda" in co_s else co_s
-    if f_sem:
-        op_s = op_s[op_s["Semana ISO"].isin(f_sem)] if not op_s.empty and "Semana ISO" in op_s else op_s
-        co_s = co_s[co_s["Semana ISO"].isin(f_sem)] if not co_s.empty and "Semana ISO" in co_s else co_s
+    if f_tiendas and not op_s.empty and "Tienda" in op_s:
+        op_s = op_s[op_s["Tienda"].isin(f_tiendas)]
+    if f_sem and not op_s.empty and "Semana ISO" in op_s:
+        op_s = op_s[op_s["Semana ISO"].isin(f_sem)]
 
-    table = operational_table(op_s, co_s, tiendas_base=f_tiendas or tiendas, periodo_label="Semana")
-    kpis(resumen_ejecutivo(op_s, co_s))
+    table = operational_table(op_s, None, tiendas_base=f_tiendas or tiendas, periodo_label="Semana")
+    res = {
+        "Ingresos": table["Piezas Ingresadas"].sum() if not table.empty else 0,
+        "Acondicionado": table["Piezas Acondicionadas"].sum() if not table.empty else 0,
+        "Ubicado": table["Piezas Ubicadas"].sum() if not table.empty else 0,
+    }
+    res["Pendiente"] = max(res["Ingresos"] - res["Ubicado"], 0)
+    res["% Acondicionado"] = safe_div(res["Acondicionado"], res["Ingresos"])
+    res["% Ubicado"] = safe_div(res["Ubicado"], res["Ingresos"])
+
+    kpis(res)
     pdf_placeholder("Reporte Semanal")
     panel("Tabla por tienda - Reporte Semanal", table, height=390, editable=is_admin)
     combined_chart(table, "Ingresos vs Acondicionado y Ubicado por tienda")
@@ -1184,10 +1231,7 @@ def reporte_semanal():
 
 def reporte_mensual():
     section("Reporte Mensual", "Misma estructura de Por Día, filtrada por tienda y mes.")
-    meses = sorted(set(
-        (op_all["Mes"].dropna().astype(str).tolist() if not op_all.empty and "Mes" in op_all else [])
-        + (co_all["Mes"].dropna().astype(str).tolist() if not co_all.empty and "Mes" in co_all else [])
-    ))
+    meses = sorted(op_all["Mes"].dropna().astype(str).unique().tolist()) if not op_all.empty and "Mes" in op_all else []
     c1, c2 = st.columns([2, 2])
     with c1:
         f_tiendas = st.multiselect("Tiendas", tiendas, placeholder="Todas las tiendas", key="mes_tiendas")
@@ -1195,16 +1239,22 @@ def reporte_mensual():
         f_mes = st.multiselect("Mes", meses, default=meses[-1:] if meses else [], key="mes_meses")
 
     op_m = op_all.copy()
-    co_m = co_all.copy()
-    if f_tiendas:
-        op_m = op_m[op_m["Tienda"].isin(f_tiendas)] if not op_m.empty and "Tienda" in op_m else op_m
-        co_m = co_m[co_m["Tienda"].isin(f_tiendas)] if not co_m.empty and "Tienda" in co_m else co_m
-    if f_mes:
-        op_m = op_m[op_m["Mes"].isin(f_mes)] if not op_m.empty and "Mes" in op_m else op_m
-        co_m = co_m[co_m["Mes"].isin(f_mes)] if not co_m.empty and "Mes" in co_m else co_m
+    if f_tiendas and not op_m.empty and "Tienda" in op_m:
+        op_m = op_m[op_m["Tienda"].isin(f_tiendas)]
+    if f_mes and not op_m.empty and "Mes" in op_m:
+        op_m = op_m[op_m["Mes"].isin(f_mes)]
 
-    table = operational_table(op_m, co_m, tiendas_base=f_tiendas or tiendas, periodo_label="Mes")
-    kpis(resumen_ejecutivo(op_m, co_m))
+    table = operational_table(op_m, None, tiendas_base=f_tiendas or tiendas, periodo_label="Mes")
+    res = {
+        "Ingresos": table["Piezas Ingresadas"].sum() if not table.empty else 0,
+        "Acondicionado": table["Piezas Acondicionadas"].sum() if not table.empty else 0,
+        "Ubicado": table["Piezas Ubicadas"].sum() if not table.empty else 0,
+    }
+    res["Pendiente"] = max(res["Ingresos"] - res["Ubicado"], 0)
+    res["% Acondicionado"] = safe_div(res["Acondicionado"], res["Ingresos"])
+    res["% Ubicado"] = safe_div(res["Ubicado"], res["Ingresos"])
+
+    kpis(res)
     pdf_placeholder("Reporte Mensual")
     panel("Tabla por tienda - Reporte Mensual", table, height=390, editable=is_admin)
     combined_chart(table, "Ingresos vs Acondicionado y Ubicado por tienda")
