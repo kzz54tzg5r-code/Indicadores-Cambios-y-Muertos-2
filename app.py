@@ -607,10 +607,10 @@ def apply_styles():
 
 
     /* Barra de pestañas estable */
-    div[data-testid="stTabs"] {
+    div[data-testid="stTabs"] {{
         margin:0 -1.6rem 18px -1.6rem !important;
-    }
-    div[data-testid="stTabs"] div[role="tablist"] {
+    }}
+    div[data-testid="stTabs"] div[role="tablist"] {{
         background:#10245F !important;
         border-top:4px solid #EC007C !important;
         border-radius:0 !important;
@@ -618,8 +618,8 @@ def apply_styles():
         overflow-x:auto !important;
         white-space:nowrap !important;
         box-shadow:0 8px 18px rgba(16,36,95,.16);
-    }
-    div[data-testid="stTabs"] button[role="tab"] {
+    }}
+    div[data-testid="stTabs"] button[role="tab"] {{
         background:#10245F !important;
         color:rgba(255,255,255,.70) !important;
         padding:14px 22px !important;
@@ -627,18 +627,18 @@ def apply_styles():
         border-bottom:4px solid transparent !important;
         font-weight:800 !important;
         font-size:14px !important;
-    }
-    div[data-testid="stTabs"] button[role="tab"] p {
+    }}
+    div[data-testid="stTabs"] button[role="tab"] p {{
         color:rgba(255,255,255,.70) !important;
         font-weight:800 !important;
-    }
-    div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
+    }}
+    div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] {{
         background:#142E73 !important;
         border-bottom-color:#EC007C !important;
-    }
-    div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] p {
+    }}
+    div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] p {{
         color:#FFFFFF !important;
-    }
+    }}
 
     @media (max-width:1200px) {{
         .top-header {{ grid-template-columns:110px 1fr; }}
