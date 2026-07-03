@@ -1404,27 +1404,58 @@ goals = load_goals()
 
 
 # ============================================================
+
+project_stores = get_project_stores()
+if not project_stores:
+    project_stores = PROJECT_TIENDAS
+
 # PÁGINAS
 # ============================================================
 
 def dashboard():
     section("Dashboard Ejecutivo", "Vista general de indicadores principales.")
-    hero(resumen, len(resumen_tienda(op_all[op_all["Tienda"].isin(project_stores)] if not op_all.empty and "Tienda" in op_all else op_all, co_all)))
-    kpis(resumen_ejecutivo(op_all, co_all))
+
+    # Tiendas operativas configuradas para el proyecto.
+    tiendas_cfg = get_project_stores()
+    if not tiendas_cfg:
+        tiendas_cfg = PROJECT_TIENDAS
+
+    op_dash = op_all.copy()
+    if not op_dash.empty and "Tienda" in op_dash:
+        op_dash["Tienda"] = op_dash["Tienda"].map(canon_tienda)
+        op_dash = op_dash[op_dash["Tienda"].isin(tiendas_cfg)]
+
+    # Conversión/recuperación siguen usando todas las tiendas en sus pestañas,
+    # pero el dashboard ejecutivo operativo usa el proyecto.
+    resumen_dash = resumen_ejecutivo(op_dash, pd.DataFrame())
+    detalle_dash = resumen_tienda(op_dash, pd.DataFrame())
+
+    hero(resumen_dash, len(detalle_dash) if detalle_dash is not None else 0)
+    kpis(resumen_dash)
     pdf_placeholder("Dashboard Ejecutivo")
-    section("Últimas 4 semanas", "Ingresos vs semana anterior, % habilitado y % ubicado sobre ingresos.")
-    week_cards(resumen_semana(op_all, co_all))
-    c1, c2 = st.columns(2)
-    with c1:
-        rank_panel("Top tiendas por ingresos", resumen_tienda(op_all[op_all["Tienda"].isin(project_stores)] if not op_all.empty and "Tienda" in op_all else op_all, co_all), "Ingresos", "Tienda", PRICE_BLUE)
-    with c2:
-        rank_panel("Top colaboradores", productividad(op_all), "Productividad", "Nombre" if not productividad(op_all).empty and "Nombre" in productividad(op_all) else "Tienda", PRICE_GREEN)
+
     st.download_button(
         "Descargar PDF de todas las pestañas con indicador",
         b"Reporte integral PDF - version base",
         "reporte_integral_indicadores.pdf",
         "application/pdf",
     )
+
+    section("Últimas 4 semanas", "Ingresos vs semana anterior, % habilitado y % ubicado sobre ingresos.")
+    week_cards(resumen_semana(op_dash, pd.DataFrame()))
+
+    c1, c2 = st.columns(2)
+    with c1:
+        rank_panel("Top tiendas por ingresos", detalle_dash, "Ingresos", "Tienda", PRICE_BLUE)
+    with c2:
+        prod_dash = productividad(op_dash)
+        rank_panel(
+            "Top colaboradores",
+            prod_dash,
+            "Productividad",
+            "Nombre" if not prod_dash.empty and "Nombre" in prod_dash else "Tienda",
+            PRICE_GREEN,
+        )
 
 def dia_anterior():
     section("Por Día", "Ingresos, pendientes y avance por tienda.")
@@ -1699,7 +1730,7 @@ def configuracion_page():
     selected_project = st.multiselect(
         "Selecciona las tiendas que alimentan las pestañas operativas",
         sorted(set(PROJECT_TIENDAS + tiendas)),
-        default=project_stores,
+        default=get_project_stores() or PROJECT_TIENDAS,
         key="project_stores_cfg",
     )
     if st.button("Guardar tiendas del proyecto", type="primary"):
@@ -1707,17 +1738,59 @@ def configuracion_page():
         st.success("Tiendas del proyecto guardadas.")
         st.rerun()
 
-    st.markdown("### Orden de pestañas")
+    st.markdown("### Mover pestañas")
+    st.caption("Selecciona una pestaña y usa Subir/Bajar para cambiar su posición en la barra azul.")
+
     current_order = get_tab_order()
-    st.caption("Como administrador puedes mover las pestañas cambiando el orden en la tabla. Edita la columna Orden y guarda.")
-    order_df = pd.DataFrame({"Pestaña": current_order, "Orden": list(range(1, len(current_order) + 1))})
-    edited_order = st.data_editor(order_df, hide_index=True, width="stretch", height=430, num_rows="fixed")
-    if st.button("Guardar orden de pestañas"):
-        edited_order["Orden"] = pd.to_numeric(edited_order["Orden"], errors="coerce").fillna(999)
-        new_order = edited_order.sort_values("Orden")["Pestaña"].tolist()
-        save_tab_order(new_order)
-        st.success("Orden guardado.")
-        st.rerun()
+    if "tab_order_work" not in st.session_state:
+        st.session_state.tab_order_work = current_order.copy()
+
+    # Si cambió en base, sincroniza conservando pestañas faltantes.
+    for t in current_order:
+        if t not in st.session_state.tab_order_work:
+            st.session_state.tab_order_work.append(t)
+    st.session_state.tab_order_work = [t for t in st.session_state.tab_order_work if t in current_order]
+
+    selected_tab = st.selectbox("Pestaña a mover", st.session_state.tab_order_work, key="move_tab_select")
+    c1, c2, c3 = st.columns([1, 1, 2])
+    with c1:
+        if st.button("⬅️ Subir / mover a la izquierda"):
+            order = st.session_state.tab_order_work
+            i = order.index(selected_tab)
+            if i > 0:
+                order[i - 1], order[i] = order[i], order[i - 1]
+                st.session_state.tab_order_work = order
+                st.rerun()
+    with c2:
+        if st.button("➡️ Bajar / mover a la derecha"):
+            order = st.session_state.tab_order_work
+            i = order.index(selected_tab)
+            if i < len(order) - 1:
+                order[i + 1], order[i] = order[i], order[i + 1]
+                st.session_state.tab_order_work = order
+                st.rerun()
+    with c3:
+        if st.button("Guardar orden de pestañas", type="primary"):
+            save_tab_order(st.session_state.tab_order_work)
+            st.success("Orden de pestañas guardado.")
+            st.rerun()
+
+    order_preview = pd.DataFrame({
+        "Orden": list(range(1, len(st.session_state.tab_order_work) + 1)),
+        "Pestaña": st.session_state.tab_order_work,
+    })
+    st.dataframe(order_preview, hide_index=True, width="stretch", height=430)
+
+    with st.expander("Edición avanzada de orden"):
+        st.caption("También puedes editar el número de orden y guardar.")
+        edited_order = st.data_editor(order_preview, hide_index=True, width="stretch", height=430, num_rows="fixed")
+        if st.button("Guardar edición avanzada"):
+            edited_order["Orden"] = pd.to_numeric(edited_order["Orden"], errors="coerce").fillna(999)
+            new_order = edited_order.sort_values("Orden")["Pestaña"].tolist()
+            save_tab_order(new_order)
+            st.session_state.tab_order_work = new_order
+            st.success("Orden guardado.")
+            st.rerun()
 
 def usuarios_page():
     section("Usuarios", "Asignación de accesos: sólo los usuarios creados pueden entrar al reporte.")
