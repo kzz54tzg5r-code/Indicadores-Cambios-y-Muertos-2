@@ -366,7 +366,7 @@ def apply_styles():
     .login-alert {{ background:#EEF5FF; border:1px solid #DBEAFE; color:{PRICE_BLUE}; border-radius:16px; padding:16px; font-weight:750; margin-bottom:18px; }}
 
     /* Barra tipo tablero comercial */
-    div[data-testid="stRadio"] > div {
+    div[data-testid="stRadio"] > div {{
         background:#14245F !important;
         border-top:4px solid #EC007C !important;
         border-radius:0 !important;
@@ -377,8 +377,8 @@ def apply_styles():
         flex-wrap:nowrap !important;
         margin:0 -1.6rem 18px -1.6rem !important;
         box-shadow:0 10px 22px rgba(20,36,95,.18);
-    }
-    div[data-testid="stRadio"] label {
+    }}
+    div[data-testid="stRadio"] label {{
         background:#14245F !important;
         color:#DDE8FF !important;
         padding:14px 24px !important;
@@ -386,14 +386,14 @@ def apply_styles():
         border-bottom:4px solid transparent !important;
         font-weight:900 !important;
         min-width:max-content !important;
-    }
-    div[data-testid="stRadio"] label:hover {
+    }}
+    div[data-testid="stRadio"] label:hover {{
         background:#1B2F75 !important;
         color:white !important;
-    }
-    div[data-testid="stRadio"] input:checked + div {
+    }}
+    div[data-testid="stRadio"] input:checked + div {{
         color:#FFFFFF !important;
-    }
+    }}
 
     @media (max-width:1200px) {{
         .top-header {{ grid-template-columns:110px 1fr; }}
