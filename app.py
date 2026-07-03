@@ -27,6 +27,11 @@ apply_styles()
 
 user = render_access()
 
+if not user.get("authenticated"):
+    st.warning("Debes ingresar con un usuario autorizado para ver la información.")
+    st.info("Usuario inicial: admin / Contraseña inicial: admin123")
+    st.stop()
+
 st.sidebar.divider()
 st.sidebar.markdown("## 📁 Fuente de datos")
 meta = get_metadata()
@@ -302,16 +307,19 @@ def configuracion_page():
 
 
 def usuarios_page():
-    section("Usuarios", "Asignación de accesos: Consulta o Administrador.")
+    section("Usuarios", "Asignación de accesos: sólo los usuarios creados pueden entrar al reporte.")
     if not user["is_admin"]:
-        st.warning("Sólo administrador puede crear usuarios.")
+        st.warning("Sólo administrador puede crear, editar o eliminar usuarios.")
         return
+
     users = load_users()
+
     st.markdown('<div class="user-card">', unsafe_allow_html=True)
+    st.markdown("### Crear nuevo usuario")
     with st.form("user_form"):
         c1, c2, c3, c4, c5 = st.columns([1, 1.5, 1.2, 1.2, .8])
         with c1:
-            nomina = st.text_input("Nómina")
+            nomina = st.text_input("Nómina / Usuario")
         with c2:
             nombre = st.text_input("Nombre")
         with c3:
@@ -320,33 +328,103 @@ def usuarios_page():
             password = st.text_input("Contraseña", type="password")
         with c5:
             activo = st.checkbox("Activo", value=True)
+
         if st.form_submit_button("Crear usuario"):
             if not nomina or not password:
-                st.error("Nómina y contraseña son obligatorias.")
+                st.error("Nómina/Usuario y contraseña son obligatorios.")
+            elif any(str(u.get("nomina", "")).strip() == str(nomina).strip() for u in users):
+                st.error("Ese usuario/nómina ya existe.")
             else:
-                users.append({"nomina": nomina, "nombre": nombre, "permiso": permiso, "password": password, "activo": activo})
+                users.append({
+                    "nomina": str(nomina).strip(),
+                    "nombre": str(nombre).strip(),
+                    "permiso": permiso,
+                    "password": str(password),
+                    "activo": bool(activo),
+                })
                 save_users(users)
-                st.success("Usuario creado. Ya podrá ingresar con el permiso asignado.")
+                st.success("Usuario creado. Ya podrá ingresar con su nómina/usuario y contraseña.")
                 st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
 
-    users_df = pd.DataFrame([{k: v for k, v in u.items() if k != "password"} for u in users])
-    edited = safe_df(users_df, height=300, editable=True)
-    if st.button("Guardar cambios de usuarios"):
-        if edited is not None:
-            old_by_nomina = {u["nomina"]: u for u in users}
+    st.markdown("### Usuarios existentes")
+    if not users:
+        st.info("No hay usuarios.")
+        return
+
+    users_df = pd.DataFrame([
+        {
+            "nomina": u.get("nomina", ""),
+            "nombre": u.get("nombre", ""),
+            "permiso": u.get("permiso", "Consulta"),
+            "activo": bool(u.get("activo", True)),
+        }
+        for u in users
+    ])
+
+    edited = st.data_editor(
+        users_df,
+        width="stretch",
+        hide_index=True,
+        height=300,
+        num_rows="fixed",
+        column_config={
+            "permiso": st.column_config.SelectboxColumn("permiso", options=["Consulta", "Administrador"]),
+            "activo": st.column_config.CheckboxColumn("activo"),
+        },
+    )
+
+    c1, c2 = st.columns([1, 1])
+    with c1:
+        if st.button("Guardar cambios", type="primary"):
+            old = {str(u.get("nomina", "")): u for u in users}
             new_users = []
             for _, r in edited.iterrows():
-                base = old_by_nomina.get(str(r.get("nomina", "")), {})
+                nom = str(r.get("nomina", "")).strip()
+                if not nom:
+                    continue
+                prev = old.get(nom, {})
                 new_users.append({
-                    "nomina": str(r.get("nomina", "")),
-                    "nombre": str(r.get("nombre", "")),
+                    "nomina": nom,
+                    "nombre": str(r.get("nombre", "")).strip(),
                     "permiso": str(r.get("permiso", "Consulta")),
-                    "password": base.get("password", ""),
+                    "password": prev.get("password", ""),
                     "activo": bool(r.get("activo", True)),
                 })
             save_users(new_users)
             st.success("Cambios guardados.")
+            st.rerun()
+
+    with c2:
+        eliminar = st.selectbox("Eliminar usuario", [""] + [u.get("nomina", "") for u in users], key="delete_user")
+        if st.button("Eliminar seleccionado"):
+            if not eliminar:
+                st.warning("Selecciona un usuario.")
+            elif eliminar == user.get("nomina"):
+                st.error("No puedes eliminar el usuario con el que estás conectado.")
+            else:
+                users = [u for u in users if u.get("nomina", "") != eliminar]
+                save_users(users)
+                st.success("Usuario eliminado.")
+                st.rerun()
+
+    st.markdown("### Cambiar contraseña")
+    with st.form("change_pass_form"):
+        c1, c2 = st.columns([1, 1])
+        with c1:
+            usr = st.selectbox("Usuario", [u.get("nomina", "") for u in users], key="pass_user")
+        with c2:
+            new_pass = st.text_input("Nueva contraseña", type="password")
+        if st.form_submit_button("Actualizar contraseña"):
+            if not new_pass:
+                st.error("Captura una contraseña.")
+            else:
+                for u in users:
+                    if u.get("nomina", "") == usr:
+                        u["password"] = new_pass
+                save_users(users)
+                st.success("Contraseña actualizada.")
+                st.rerun()
 
 
 ROUTES = {

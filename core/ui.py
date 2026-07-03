@@ -72,25 +72,63 @@ def nav_bar():
     if "page" not in st.session_state:
         st.session_state["page"] = "Resumen"
 
-    current = st.session_state["page"]
-    html = '<div class="nav-bar">'
-    for item in items:
-        active = " nav-item-active" if item == current else ""
-        html += f'<a class="nav-item{active}" href="?page={item}">{item}</a>'
-    html += "</div>"
-    st.markdown(html, unsafe_allow_html=True)
+    current = st.session_state.get("page", "Resumen")
+    if current not in items:
+        current = "Resumen"
 
-    # Leer query params de forma compatible.
     try:
-        qp = st.query_params
-        page = qp.get("page", current)
+        selected = st.segmented_control(
+            "Navegación",
+            options=items,
+            default=current,
+            label_visibility="collapsed",
+            key="page_selector",
+        )
     except Exception:
-        page = current
+        selected = st.radio(
+            "Navegación",
+            options=items,
+            index=items.index(current),
+            horizontal=True,
+            label_visibility="collapsed",
+            key="page_selector_radio",
+        )
 
-    if isinstance(page, list):
-        page = page[0] if page else current
-    if page in items:
-        st.session_state["page"] = page
+    st.session_state["page"] = selected or current
+
+    st.markdown(
+        """
+        <style>
+        div[data-testid="stSegmentedControl"] {
+            background:#1D2E6E;
+            border-top:4px solid #EC007C;
+            padding:0;
+            margin:0 -1.6rem 22px -1.6rem;
+            overflow-x:auto;
+            white-space:nowrap;
+            display:block;
+            box-shadow:0 10px 22px rgba(29,46,110,.18);
+        }
+        div[data-testid="stSegmentedControl"] button {
+            border-radius:0 !important;
+            border:none !important;
+            background:#1D2E6E !important;
+            color:#DDE8FF !important;
+            padding:15px 23px !important;
+            font-weight:900 !important;
+            font-size:15px !important;
+            border-bottom:4px solid transparent !important;
+            white-space:nowrap !important;
+        }
+        div[data-testid="stSegmentedControl"] button[aria-pressed="true"] {
+            color:white !important;
+            background:#233B86 !important;
+            border-bottom-color:#EC007C !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
     return st.session_state["page"]
 

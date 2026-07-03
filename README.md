@@ -1,34 +1,8 @@
-# Indicadores Cambios y Muertos v7
+# Indicadores Cambios y Muertos v7.1
 
-Versión limpia y estable con diseño tipo tablero comercial.
-
-## Incluye
-
-- Navegación superior azul.
-- Sidebar sólo para acceso y carga de archivo.
-- Dashboard ejecutivo.
-- Día anterior / pendiente.
-- Reporte semanal.
-- Reporte mensual.
-- Conversión semanal Dev → Venta.
-- Recuperación económica.
-- Productividad.
-- Recorridos.
-- Rankings.
-- Macro.
-- Diagnóstico.
-- Configuración de metas.
-- Usuarios para acceso Consulta / Administrador.
-- Tablas editables para administrador.
-
-## Clave inicial
-
-- Administrador: `admin123`
-- Consulta: entra sin clave.
-
-## Ejecutar local
-
-```bash
-pip install -r requirements.txt
-streamlit run app.py
-```
+Correcciones:
+- Login obligatorio: si el usuario no existe, no puede ver información.
+- Usuario inicial: `admin` / `admin123`.
+- Navegación interna superior azul sin links, no abre pestañas nuevas del navegador.
+- Administrador puede crear, editar, cambiar contraseña y eliminar usuarios.
+- Permisos disponibles: Consulta y Administrador.
