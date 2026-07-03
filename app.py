@@ -285,6 +285,22 @@ def canon_tienda(x):
     return s.title()
 
 
+
+def exact_col(df, name):
+    target = norm_text(name)
+    for c in df.columns:
+        if norm_text(c) == target:
+            return c
+    return None
+
+
+def pick_first_existing(df, names):
+    for n in names:
+        c = exact_col(df, n)
+        if c is not None:
+            return c
+    return None
+
 def find_col(df, candidates):
     norm_cols = {norm_text(c): c for c in df.columns}
     for cand in candidates:
@@ -859,20 +875,30 @@ def normalize_operation(df, sheet_name):
         return pd.DataFrame()
     out = pd.DataFrame()
     out["Hoja"] = sheet_name
-    c_fecha = find_col(df, ["Fecha", "Fecha captura", "Día", "Dia"])
-    c_tienda = find_col(df, ["Tienda", "Sucursal"])
-    c_nombre = find_col(df, ["Nombre", "Usuario", "Colaborador"])
-    c_actividad = find_col(df, ["Actividad Realizada", "Actividad", "Tabla"])
-    c_piezas = find_col(df, ["Número de Piezas", "Numero de Piezas", "Piezas", "Cantidad"])
-    c_recorridos = find_col(df, ["Recorridos", "RECORRIDOS"])
-    c_hab = find_col(df, ["Habilitado", "Acondicionado", "Acondicionadas", "Piezas Habilitadas"])
-    c_ubi = find_col(df, ["Ubicado", "Ubicadas", "Piezas Ubicadas"])
-    c_ocurrencia = find_col(df, ["Ocurrencia", "Occurrence", "Ba"])
-    c_area = find_col(df, ["Área", "Area"])
-    c_motivo = find_col(df, ["Motivo de ingreso", "Motivo"])
+    # IMPORTANTE:
+    # En "Resultados productividad" la tienda viene en la columna "Tienda".
+    # Se usan columnas exactas primero para no confundir "Fecha s" con "Fecha".
+    c_fecha = pick_first_existing(df, ["Fecha", "Fecha captura", "Día", "Dia"]) or find_col(df, ["Fecha", "Fecha captura", "Día", "Dia"])
+    c_tienda = pick_first_existing(df, ["Tienda", "Sucursal"]) or find_col(df, ["Tienda", "Sucursal"])
+    c_nombre = pick_first_existing(df, ["Nombre", "Usuario", "Colaborador"]) or find_col(df, ["Nombre", "Usuario", "Colaborador"])
+    c_actividad = pick_first_existing(df, ["Actividad Realizada", "Actividad", "Tabla"]) or find_col(df, ["Actividad Realizada", "Actividad", "Tabla"])
+    c_piezas = pick_first_existing(df, ["Número de Piezas", "Numero de Piezas", "Piezas", "Cantidad"]) or find_col(df, ["Número de Piezas", "Numero de Piezas", "Piezas", "Cantidad"])
+    c_recorridos = pick_first_existing(df, ["Recorridos", "RECORRIDOS"]) or find_col(df, ["Recorridos", "RECORRIDOS"])
+    c_hab = pick_first_existing(df, ["Habilitado", "Acondicionado", "Acondicionadas", "Piezas Habilitadas"]) or find_col(df, ["Habilitado", "Acondicionado", "Acondicionadas", "Piezas Habilitadas"])
+    c_ubi = pick_first_existing(df, ["Ubicado", "Ubicadas", "Piezas Ubicadas"]) or find_col(df, ["Ubicado", "Ubicadas", "Piezas Ubicadas"])
+    c_ocurrencia = pick_first_existing(df, ["Occurrence", "Ocurrencia", "Ba"]) or find_col(df, ["Ocurrencia", "Occurrence", "Ba"])
+    c_area = pick_first_existing(df, ["Área", "Area"]) or find_col(df, ["Área", "Area"])
+    c_motivo = pick_first_existing(df, ["Motivo de ingreso", "Motivo"]) or find_col(df, ["Motivo de ingreso", "Motivo"])
 
     out["Fecha"] = pd.to_datetime(df[c_fecha], errors="coerce") if c_fecha else pd.NaT
-    out["Tienda"] = df[c_tienda].astype(str).map(canon_tienda) if c_tienda else ""
+    # Si la columna Fecha exacta no parseó, intentar Fecha s.
+    c_fecha_s = exact_col(df, "Fecha s")
+    if out["Fecha"].isna().all() and c_fecha_s is not None:
+        out["Fecha"] = pd.to_datetime(df[c_fecha_s], errors="coerce", dayfirst=True)
+    if exact_col(df, "Tienda") is not None:
+        out["Tienda"] = df[exact_col(df, "Tienda")].astype(str).map(canon_tienda)
+    else:
+        out["Tienda"] = df[c_tienda].astype(str).map(canon_tienda) if c_tienda else ""
     out["Nombre"] = df[c_nombre].astype(str).str.strip() if c_nombre else ""
     out["Actividad Realizada"] = df[c_actividad].astype(str).str.strip() if c_actividad else ""
     out["Número de Piezas"] = to_number(df[c_piezas]) if c_piezas else 0
@@ -888,11 +914,11 @@ def normalize_operation(df, sheet_name):
     act_norm = out["Actividad Realizada"].map(norm_text)
     pzs = out["Número de Piezas"]
     if out["Acondicionado"].sum() == 0:
-        out["Acondicionado"] = np.where(act_norm.str.contains("HABIL|ACOND"), pzs, 0)
+        out["Acondicionado"] = np.where(act_norm.str.contains("HABIL|ACONDICION", na=False), pzs, 0)
     if out["Ubicado"].sum() == 0:
-        out["Ubicado"] = np.where(act_norm.str.contains("UBIC"), pzs, 0)
+        out["Ubicado"] = np.where(act_norm.str.contains("UBIC", na=False), pzs, 0)
     if out["Recorridos"].sum() == 0:
-        out["Recorridos"] = np.where(act_norm.str.contains("RECORR"), 1, 0)
+        out["Recorridos"] = np.where(act_norm.str.contains("RECORR", na=False), 1, 0)
 
     out["Semana ISO"] = out["Fecha"].dt.isocalendar().week.astype("Int64")
     out["Año ISO"] = out["Fecha"].dt.isocalendar().year.astype("Int64")
@@ -1010,7 +1036,15 @@ def load_normalized(file_path, mtime):
     ops, coms, diagnostics = [], [], []
     for name, df in sheets.items():
         kind = classify_sheet(name, df)
-        diagnostics.append({"Hoja": name, "Tipo detectado": kind, "Filas": len(df), "Columnas": len(df.columns)})
+        diagnostics.append({
+            "Hoja": name,
+            "Tipo detectado": kind,
+            "Filas": len(df),
+            "Columnas": len(df.columns),
+            "Col Tienda detectada": str(pick_first_existing(df, ["Tienda", "Sucursal"]) or find_col(df, ["Tienda", "Sucursal"])),
+            "Col Fecha detectada": str(pick_first_existing(df, ["Fecha", "Fecha captura", "Día", "Dia"]) or find_col(df, ["Fecha", "Fecha captura", "Día", "Dia"])),
+            "Col Piezas detectada": str(pick_first_existing(df, ["Número de Piezas", "Numero de Piezas", "Piezas", "Cantidad"]) or find_col(df, ["Número de Piezas", "Numero de Piezas", "Piezas", "Cantidad"])),
+        })
         if kind == "operacion":
             ops.append(normalize_operation(df, name))
         elif kind == "comercial":
@@ -1471,6 +1505,8 @@ def dia_anterior():
         st.warning("No hay registros operativos para la fecha seleccionada. Selecciona una fecha que exista en el Excel.")
         if fechas:
             st.caption("Fechas disponibles más recientes: " + ", ".join([str(f) for f in fechas[-7:]]))
+    else:
+        st.caption(f"Registros detectados en Resultados productividad para la fecha seleccionada: {len(op_d):,}")
     table = operational_table(op_d, None, tiendas_base=project_stores, periodo_label="Día")
     if not table.empty and not prev_pend.empty:
         table = table.drop(columns=["Pendientes del día anterior"], errors="ignore").merge(prev_pend, on="Tienda", how="left")

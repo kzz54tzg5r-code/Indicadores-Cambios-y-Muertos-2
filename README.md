@@ -1,8 +1,8 @@
-# Indicadores Cambios y Muertos v8.6.2
+# Indicadores Cambios y Muertos v8.6.3
 
-Correcciones:
-- Corrige NameError en Dashboard por variable project_stores.
-- Dashboard usa tiendas configuradas del proyecto sin romper.
-- En Configuración, el administrador puede mover pestañas con botones Subir/Bajar.
-- Mantiene encabezados de tabla azul con letras blancas.
-- Mantiene tiendas del proyecto para pestañas operativas y todas las tiendas para Conversión/Recuperación.
+Corrección solicitada:
+- La información de tiendas se toma directamente de la columna "Tienda" de la hoja "Resultados productividad".
+- Se evita confundir "Fecha s" con "Fecha".
+- Diagnóstico muestra qué columnas detectó por hoja: Tienda, Fecha y Número de Piezas.
+- Por Día muestra cuántos registros detectó para la fecha seleccionada.
+- Mantiene mover pestañas desde Configuración.
