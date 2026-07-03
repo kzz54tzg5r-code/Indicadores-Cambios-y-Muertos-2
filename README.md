@@ -1,18 +1,23 @@
-# Indicadores Cambios y Muertos v8.2
+# Indicadores Cambios y Muertos v8.3
 
-Ajustes:
-- Mantiene diseño moderno de la página.
-- Pestañas superiores en azul como el ejemplo proporcionado.
-- Estructura de pestañas del proyecto trabajado:
-  Dashboard Ejecutivo, Día Anterior, Reporte Semanal, Reporte Mensual, Conversión,
-  Recuperación Económica, Productividad, Recorridos, Rankings, Macro, Diagnóstico,
-  Configuración y Usuarios.
-- Conserva login obligatorio, usuarios, administrador/consulta, caché y SQLite.
-- Versión single-file para evitar errores de mezcla con carpetas core viejas.
+Correcciones de ingeniería:
+- Base tomada del diseño v6/interfaz ejecutiva pero estable en un solo app.py.
+- Pestañas superiores azules con estructura completa.
+- Usuario muestra el nombre con el que inició sesión.
+- Filtros dinámicos por pestaña:
+  - Dashboard/Día anterior: tienda + periodo.
+  - Semanal/Conversión/Recuperación/Recorridos: tienda + Semana ISO.
+  - Mensual/Macro: tienda + mes.
+  - Productividad/Rankings: tienda + colaborador.
+- Hoja Plantilla: homologa nombres de productividad.
+  Ejemplo: Elo -> Eloisa si viene en Plantilla.
+- Conversión y recuperación respetan Semana ISO:
+  Agrupa por Semana ISO + Tienda + ID/Modelo + Color.
+  No mezcla semanas aunque consultes mes completo.
+- Corrige renderizado donde se veía HTML en pantalla.
 
 Subir a GitHub:
 - app.py
 - requirements.txt
 - assets/ si usas logo
-
-Recomendado: borrar versiones viejas, carpetas core y archivos duplicados antes de subir.
+Borra carpetas/archivos viejos para evitar mezclas.

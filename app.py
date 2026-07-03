@@ -267,8 +267,8 @@ def apply_styles():
 
     .top-header {{
         background:#FFFFFF; border-bottom:4px solid {PRICE_PINK};
-        padding:18px 24px; display:grid; grid-template-columns:160px 1fr 430px;
-        gap:24px; align-items:center; margin:0 -1.6rem 0 -1.6rem;
+        padding:18px 28px; display:grid; grid-template-columns:150px 1fr 460px;
+        gap:26px; align-items:center; margin:0 -1.6rem 0 -1.6rem;
     }}
     .logo-fallback {{ font-weight:950; color:{PRICE_BLUE}; font-size:25px; line-height:.9; text-align:center; }}
     .header-title {{ border-left:4px solid {PRICE_PINK}; padding-left:22px; }}
@@ -278,30 +278,31 @@ def apply_styles():
     .header-controls {{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }}
     .header-card {{ background:#F8FAFC; border:1px solid #DCE3EF; border-radius:14px; padding:12px 14px; }}
     .header-card label {{ display:block; color:{PRICE_GRAY}; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:1.4px; }}
-    .header-card div {{ color:{PRICE_BLUE}; font-size:17px; font-weight:950; margin-top:3px; }}
+    .header-card div {{ color:{PRICE_BLUE}; font-size:17px; font-weight:950; margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }}
 
     div[data-testid="stSegmentedControl"] {{
         background:{PRICE_BLUE};
         border-top:4px solid {PRICE_PINK};
         padding:0;
-        margin:0 -1.6rem 22px -1.6rem;
+        margin:0 -1.6rem 18px -1.6rem;
         overflow-x:auto;
         white-space:nowrap;
         display:block;
-        box-shadow:0 10px 22px rgba(29,46,110,.18);
         border-radius:0 !important;
+        box-shadow:0 10px 22px rgba(29,46,110,.18);
     }}
     div[data-testid="stSegmentedControl"] > div {{
-        gap:0 !important;
         background:{PRICE_BLUE} !important;
         border-radius:0 !important;
+        gap:0 !important;
+        flex-wrap:nowrap !important;
     }}
     div[data-testid="stSegmentedControl"] button {{
         border-radius:0 !important;
         border:none !important;
         background:{PRICE_BLUE} !important;
         color:#DDE8FF !important;
-        padding:15px 24px !important;
+        padding:15px 23px !important;
         font-weight:900 !important;
         font-size:15px !important;
         border-bottom:4px solid transparent !important;
@@ -396,7 +397,7 @@ def header(user):
         </div>
         <div class="header-controls">
             <div class="header-card"><label>Fecha</label><div>📅 {now.strftime("%d/%m/%Y")}</div></div>
-            <div class="header-card"><label>Usuario</label><div>{'👑' if user['is_admin'] else '👤'} {user['role']}</div></div>
+            <div class="header-card"><label>Usuario</label><div>{'👑' if user['is_admin'] else '👤'} {user.get('name') or user.get('role')}</div></div>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -433,20 +434,10 @@ def nav_bar():
         "Configuración",
         "Usuarios",
     ]
-
     if "page" not in st.session_state:
         st.session_state.page = "Dashboard Ejecutivo"
-
     current = st.session_state.page if st.session_state.page in items else "Dashboard Ejecutivo"
-
-    selected = st.segmented_control(
-        "Pestañas",
-        items,
-        default=current,
-        label_visibility="collapsed",
-        key="page_selector"
-    )
-
+    selected = st.segmented_control("Pestañas", items, default=current, label_visibility="collapsed", key="page_selector")
     st.session_state.page = selected or current
     return st.session_state.page
 
@@ -468,29 +459,29 @@ def kpi_card(label, value, icon, color, note="", pct=0, delta=""):
 
 def kpis(resumen):
     cards = [
-        ("Piezas Ingresadas", fmt_num(resumen.get("Ingresos", 0)), "↻", PRICE_PINK, "Dev + muertos + cajas + probador", 100, ""),
-        ("Piezas Acondicionadas", fmt_num(resumen.get("Acondicionado", 0)), "✓", PRICE_BLUE, fmt_pct(resumen.get("% Acondicionado", 0)) + " vs ingresos", resumen.get("% Acondicionado", 0), ""),
-        ("Piezas Ubicadas", fmt_num(resumen.get("Ubicado", 0)), "⌖", PRICE_ORANGE, fmt_pct(resumen.get("% Ubicado", 0)) + " vs ingresos", resumen.get("% Ubicado", 0), ""),
-        ("Pendientes por Ubicar", fmt_num(resumen.get("Pendiente", 0)), "⌛", PRICE_GREEN, "Ingreso - ubicado", 100 - resumen.get("% Ubicado", 0), ""),
-        ("% Procesado", fmt_pct(resumen.get("% Ubicado", 0)), "%", PRICE_PURPLE, "Ubicado / ingresadas", resumen.get("% Ubicado", 0), ""),
+        ("Piezas Ingresadas", fmt_num(resumen.get("Ingresos", 0)), "↻", PRICE_PINK, "Dev + muertos + cajas + probador", 100),
+        ("Piezas Acondicionadas", fmt_num(resumen.get("Acondicionado", 0)), "✓", PRICE_BLUE, fmt_pct(resumen.get("% Acondicionado", 0)) + " vs ingresos", resumen.get("% Acondicionado", 0)),
+        ("Piezas Ubicadas", fmt_num(resumen.get("Ubicado", 0)), "⌖", PRICE_ORANGE, fmt_pct(resumen.get("% Ubicado", 0)) + " vs ingresos", resumen.get("% Ubicado", 0)),
+        ("Pendientes por Ubicar", fmt_num(resumen.get("Pendiente", 0)), "⌛", PRICE_GREEN, "Ingreso - ubicado", 100 - resumen.get("% Ubicado", 0)),
+        ("% Procesado", fmt_pct(resumen.get("% Ubicado", 0)), "%", PRICE_PURPLE, "Ubicado / ingresadas", resumen.get("% Ubicado", 0)),
     ]
-
-    html = '<div class="kpi-grid">'
-    for label, value, icon, color, note, pct, delta in cards:
-        html += f"""
-        <div class="kpi-card" style="--accent:{color};--soft:{color}18;--shadow:{color}38;">
-            <div class="kpi-top">
-                <div class="kpi-icon">{icon}</div>
-                <div class="kpi-label">{label}</div>
-            </div>
-            <div class="kpi-value">{value}</div>
-            <div class="kpi-note">{note}</div>
-            <div class="progress"><div style="--pct:{pct_clip(pct)}%;"></div></div>
-            {f'<div class="delta">{delta}</div>' if delta else ''}
-        </div>
-        """
-    html += "</div>"
-    st.markdown(html, unsafe_allow_html=True)
+    cols = st.columns(5)
+    for col, (label, value, icon, color, note, pct) in zip(cols, cards):
+        with col:
+            st.markdown(
+                f"""
+<div class="kpi-card" style="--accent:{color};--soft:{color}18;--shadow:{color}38;">
+  <div class="kpi-top">
+    <div class="kpi-icon">{icon}</div>
+    <div class="kpi-label">{label}</div>
+  </div>
+  <div class="kpi-value">{value}</div>
+  <div class="kpi-note">{note}</div>
+  <div class="progress"><div style="--pct:{pct_clip(pct)}%;"></div></div>
+</div>
+                """,
+                unsafe_allow_html=True,
+            )
 
 def hero(resumen, tiendas_count=0):
     st.markdown(f"""
@@ -544,36 +535,37 @@ def week_cards(sem_df):
         st.info("Sin información semanal.")
         return
     df = sem_df.tail(4).copy()
-    html = '<div class="week-grid">'
+    cols = st.columns(4)
     prev = None
-    for _, r in df.iterrows():
+    for col, (_, r) in zip(cols, df.iterrows()):
         ingresos = float(r.get("Ingresos", 0) or 0)
         hab = float(r.get("Acondicionado", 0) or 0)
         ubi = float(r.get("Ubicado", 0) or 0)
         rec = float(r.get("Recorridos", 0) or 0)
         semana = r.get("Semana ISO", 0)
         if prev is None or prev == 0:
-            delta = '<span class="week-delta" style="color:#777;">—</span>'
+            delta = "—"
+            dcolor = "#777"
         else:
             d = (ingresos - prev) / prev * 100
-            arrow = "▲" if d >= 0 else "▼"
-            color = PRICE_GREEN if d >= 0 else PRICE_RED
-            delta = f'<span class="week-delta" style="color:{color};">{arrow} {abs(d):.1f}%</span>'
+            delta = ("▲ " if d >= 0 else "▼ ") + f"{abs(d):.1f}%"
+            dcolor = PRICE_GREEN if d >= 0 else PRICE_RED
         prev = ingresos
         p_hab = hab / ingresos * 100 if ingresos else 0
         p_ubi = ubi / ingresos * 100 if ingresos else 0
-        html += f"""
-        <div class="week-card">
-            <div class="week-head">Sem {semana}</div>
-            <div class="week-line"><div class="week-label">Ingresos</div><div class="week-value">{fmt_num(ingresos)}</div>{delta}</div>
-            <div class="week-line"><div class="week-label">% Hab / Ing</div><div class="week-value">{p_hab:.1f}%</div><span></span></div>
-            <div class="week-line"><div class="week-label">% Ubic / Ing</div><div class="week-value">{p_ubi:.1f}%</div><span></span></div>
-            <div class="week-line"><div class="week-label">Recorridos</div><div class="week-value">{fmt_num(rec)}</div><span></span></div>
-        </div>
-        """
-    html += "</div>"
-    st.markdown(html, unsafe_allow_html=True)
-
+        with col:
+            st.markdown(
+                f"""
+<div class="week-card">
+  <div class="week-head">Sem {semana}</div>
+  <div class="week-line"><div class="week-label">Ingresos</div><div class="week-value">{fmt_num(ingresos)}</div><span class="week-delta" style="color:{dcolor};">{delta}</span></div>
+  <div class="week-line"><div class="week-label">% Hab / Ing</div><div class="week-value">{p_hab:.1f}%</div><span></span></div>
+  <div class="week-line"><div class="week-label">% Ubic / Ing</div><div class="week-value">{p_ubi:.1f}%</div><span></span></div>
+  <div class="week-line"><div class="week-label">Recorridos</div><div class="week-value">{fmt_num(rec)}</div><span></span></div>
+</div>
+                """,
+                unsafe_allow_html=True,
+            )
 
 def rank_panel(title, df, value_col, name_col="Tienda", color=PRICE_PINK):
     st.markdown(f'<div class="panel"><div class="panel-title">{title}</div>', unsafe_allow_html=True)
@@ -696,6 +688,49 @@ def normalize_commercial(df, sheet_name):
     return out
 
 
+
+def build_nombre_map(sheets):
+    # Busca hoja Plantilla y crea diccionario alias -> nombre completo.
+    for sheet_name, df in sheets.items():
+        if "PLANTILLA" not in norm_text(sheet_name):
+            continue
+        if df is None or df.empty:
+            continue
+        c_alias = find_col(df, ["Alias", "Usuario", "Nombre corto", "Corto", "Registro", "Nombre productividad", "Nombre en productividad"])
+        c_nombre = find_col(df, ["Nombre", "Nombre completo", "Colaborador"])
+        if c_nombre is None:
+            # Si no hay columna clara, usa la primera columna como nombre.
+            c_nombre = df.columns[0]
+        if c_alias is None:
+            # Si no hay alias claro, crea alias con primer nombre del colaborador.
+            tmp = df[[c_nombre]].dropna().copy()
+            tmp["__alias__"] = tmp[c_nombre].astype(str).str.split().str[0]
+            return {norm_text(a): str(n).strip() for a, n in zip(tmp["__alias__"], tmp[c_nombre]) if str(a).strip()}
+        mp = {}
+        for _, row in df.iterrows():
+            alias = str(row.get(c_alias, "")).strip()
+            nombre = str(row.get(c_nombre, "")).strip()
+            if alias and nombre and alias.lower() != "nan" and nombre.lower() != "nan":
+                mp[norm_text(alias)] = nombre
+                # También permitir primer nombre como alias secundario.
+                primer = nombre.split()[0] if nombre.split() else ""
+                if primer:
+                    mp.setdefault(norm_text(primer), nombre)
+        return mp
+    return {}
+
+
+def apply_nombre_map(op, nombre_map):
+    if op is None or op.empty or "Nombre" not in op.columns or not nombre_map:
+        if op is not None and not op.empty and "Nombre" in op.columns:
+            op["Nombre Homologado"] = op["Nombre"]
+        return op
+    out = op.copy()
+    out["Nombre Original"] = out["Nombre"]
+    out["Nombre Homologado"] = out["Nombre"].astype(str).map(lambda x: nombre_map.get(norm_text(x), x))
+    out["Nombre"] = out["Nombre Homologado"]
+    return out
+
 @st.cache_data(show_spinner=False)
 def load_normalized(file_path, mtime):
     sheets = pd.read_excel(file_path, sheet_name=None, engine="openpyxl")
@@ -709,7 +744,9 @@ def load_normalized(file_path, mtime):
             coms.append(normalize_commercial(df, name))
     op = pd.concat(ops, ignore_index=True) if ops else pd.DataFrame()
     co = pd.concat(coms, ignore_index=True) if coms else pd.DataFrame()
-    return op, co, pd.DataFrame(diagnostics), list(sheets.keys())
+    nombre_map = build_nombre_map(sheets)
+    op = apply_nombre_map(op, nombre_map)
+    return op, co, pd.DataFrame(diagnostics), list(sheets.keys()), nombre_map
 
 
 def filter_period(op, co, period):
@@ -811,32 +848,61 @@ def productividad(op):
 
 
 def conversion(co):
-    if co.empty:
-        return pd.DataFrame(), {"Dev Pzs": 0, "Conversión Pzs": 0, "Conversión $": 0, "Pendiente Pzs": 0, "% Conversión": 0, "No Convertido $": 0}
+    base_k = {"Dev Pzs": 0, "Conversión Pzs": 0, "Conversión $": 0, "Pendiente Pzs": 0, "% Conversión": 0, "No Convertido $": 0}
+    if co is None or co.empty:
+        return pd.DataFrame(), base_k
+
     df = co.copy()
     for c in ["Dev_Pzs", "Vta_Pzs", "Vta_Imp", "Costo_Dev"]:
         if c not in df:
             df[c] = 0
-    group_cols = [c for c in ["Semana ISO", "Tienda", "ID/Modelo", "Color", "Talla"] if c in df.columns]
-    if not group_cols:
-        group_cols = ["Tienda"] if "Tienda" in df.columns else []
-    if group_cols:
-        g = df.groupby(group_cols, dropna=False).agg(**{
-            "Dev Pzs": ("Dev_Pzs", "sum"), "Venta Pzs": ("Vta_Pzs", "sum"),
-            "Venta $": ("Vta_Imp", "sum"), "Costo Dev": ("Costo_Dev", "sum")
-        }).reset_index()
-    else:
-        g = pd.DataFrame([{"Dev Pzs": df["Dev_Pzs"].sum(), "Venta Pzs": df["Vta_Pzs"].sum(), "Venta $": df["Vta_Imp"].sum(), "Costo Dev": df["Costo_Dev"].sum()}])
-    g["Conversión Pzs"] = g[["Dev Pzs", "Venta Pzs"]].min(axis=1)
-    ratio = g["Conversión Pzs"] / g["Venta Pzs"].replace(0, pd.NA)
-    g["Conversión $"] = (g["Venta $"] * ratio.fillna(0)).fillna(0)
-    g["Pendiente Pzs"] = (g["Dev Pzs"] - g["Conversión Pzs"]).clip(lower=0)
-    g["No Convertido $"] = (g["Costo Dev"] - g["Conversión $"]).clip(lower=0)
-    g["% Conversión"] = (g["Conversión Pzs"] / g["Dev Pzs"].replace(0, pd.NA) * 100).fillna(0)
+
+    # Regla: la conversión siempre se calcula dentro de la misma Semana ISO,
+    # amarrada a tienda, id/modelo y color. No se mezcla el mes completo.
+    group_cols = [c for c in ["Semana ISO", "Tienda", "ID/Modelo", "Color"] if c in df.columns]
+    if "Semana ISO" not in group_cols:
+        df["Semana ISO"] = 0
+        group_cols = ["Semana ISO"] + [c for c in ["Tienda", "ID/Modelo", "Color"] if c in df.columns]
+
+    g = df.groupby(group_cols, dropna=False).agg(
+        **{
+            "Dev Pzs Semana": ("Dev_Pzs", "sum"),
+            "Venta Pzs Semana": ("Vta_Pzs", "sum"),
+            "Venta $ Semana": ("Vta_Imp", "sum"),
+            "Costo Dev Semana": ("Costo_Dev", "sum"),
+        }
+    ).reset_index()
+
+    g["Conversión Dev → Venta Pzs"] = g[["Dev Pzs Semana", "Venta Pzs Semana"]].min(axis=1)
+
+    # Importe de venta recuperada proporcional a las piezas que sí convierten dentro de la misma semana.
+    ratio_venta = g["Conversión Dev → Venta Pzs"] / g["Venta Pzs Semana"].replace(0, pd.NA)
+    g["Conversión Dev → Venta $"] = (g["Venta $ Semana"] * ratio_venta.fillna(0)).fillna(0)
+
+    g["Pendiente por Convertir Pzs"] = (g["Dev Pzs Semana"] - g["Conversión Dev → Venta Pzs"]).clip(lower=0)
+
+    # Venta no convertida $ = costo pendiente proporcional a piezas devueltas que no se vendieron misma semana.
+    ratio_pend = g["Pendiente por Convertir Pzs"] / g["Dev Pzs Semana"].replace(0, pd.NA)
+    g["Venta No Convertida $"] = (g["Costo Dev Semana"] * ratio_pend.fillna(0)).fillna(0)
+
+    g["% Conversión Semanal Dev → Venta"] = (
+        g["Conversión Dev → Venta Pzs"] / g["Dev Pzs Semana"].replace(0, pd.NA) * 100
+    ).fillna(0)
+
+    # Alias para compatibilidad con pantallas existentes.
+    g["Dev Pzs"] = g["Dev Pzs Semana"]
+    g["Conversión Pzs"] = g["Conversión Dev → Venta Pzs"]
+    g["Conversión $"] = g["Conversión Dev → Venta $"]
+    g["Pendiente Pzs"] = g["Pendiente por Convertir Pzs"]
+    g["No Convertido $"] = g["Venta No Convertida $"]
+    g["% Conversión"] = g["% Conversión Semanal Dev → Venta"]
+
     k = {
-        "Dev Pzs": g["Dev Pzs"].sum(), "Conversión Pzs": g["Conversión Pzs"].sum(),
-        "Conversión $": g["Conversión $"].sum(), "Pendiente Pzs": g["Pendiente Pzs"].sum(),
-        "No Convertido $": g["No Convertido $"].sum()
+        "Dev Pzs": g["Dev Pzs Semana"].sum(),
+        "Conversión Pzs": g["Conversión Dev → Venta Pzs"].sum(),
+        "Conversión $": g["Conversión Dev → Venta $"].sum(),
+        "Pendiente Pzs": g["Pendiente por Convertir Pzs"].sum(),
+        "No Convertido $": g["Venta No Convertida $"].sum(),
     }
     k["% Conversión"] = safe_div(k["Conversión Pzs"], k["Dev Pzs"])
     return g, k
@@ -905,7 +971,7 @@ if is_admin:
 
 st.sidebar.markdown('<div style="background:#EEF5FF;border-radius:14px;padding:14px;margin-top:24px;color:#1D2E6E;font-weight:900;">🛡️ CONFIDENCIAL<br><span style="font-weight:500;color:#6B7280;">Price Shoes | Operaciones Ropa</span></div>', unsafe_allow_html=True)
 
-header({"role": user.get("permiso", "Consulta"), "is_admin": is_admin})
+header({"role": user.get("permiso", "Consulta"), "is_admin": is_admin, "name": user.get("nombre") or user.get("nomina")})
 
 if not ACTIVE_FILE.exists():
     st.warning("Carga un archivo Excel desde el panel lateral para iniciar.")
@@ -914,7 +980,7 @@ if not ACTIVE_FILE.exists():
 page = nav_bar()
 
 try:
-    op_all, co_all, diag_df, sheet_names = load_normalized(str(ACTIVE_FILE), ACTIVE_FILE.stat().st_mtime)
+    op_all, co_all, diag_df, sheet_names, nombre_map = load_normalized(str(ACTIVE_FILE), ACTIVE_FILE.stat().st_mtime)
 except Exception as e:
     st.error("No fue posible procesar el Excel. Valida que el archivo no esté dañado y que tenga hojas operativas/comerciales.")
     st.exception(e)
@@ -925,27 +991,115 @@ tiendas = sorted(set(
     + (co_all["Tienda"].dropna().astype(str).tolist() if not co_all.empty and "Tienda" in co_all else [])
 ))
 
-st.markdown('<div class="filter-card">', unsafe_allow_html=True)
-c1, c2, c3, c4 = st.columns([2.1, 1.5, 1.2, .8])
-with c1:
-    f_tienda = st.multiselect("Tienda", tiendas, placeholder="Todas las tiendas")
-with c2:
-    periodo = st.selectbox("Periodo", ["Todo el archivo", "Semana actual", "Mes actual"], index=0)
-with c3:
-    vista = st.selectbox("Vista", ["Ejecutiva", "Detalle"], index=0)
-with c4:
-    st.write("")
-    st.button("Actualizar", type="primary", use_container_width=True)
-st.markdown("</div>", unsafe_allow_html=True)
+def render_filters(page, op_all, co_all, tiendas):
+    st.markdown('<div class="filter-card">', unsafe_allow_html=True)
+    today = pd.Timestamp.today()
 
-op_base, co_base = op_all.copy(), co_all.copy()
-if f_tienda:
-    if not op_base.empty and "Tienda" in op_base:
-        op_base = op_base[op_base["Tienda"].isin(f_tienda)]
-    if not co_base.empty and "Tienda" in co_base:
-        co_base = co_base[co_base["Tienda"].isin(f_tienda)]
+    if page in ["Dashboard Ejecutivo", "Día Anterior"]:
+        c1, c2, c3 = st.columns([2.2, 1.2, .9])
+        with c1:
+            f_tienda = st.multiselect("Tienda", tiendas, placeholder="Todas las tiendas")
+        with c2:
+            periodo = st.selectbox("Periodo", ["Todo el archivo", "Mes actual", "Semana actual"], index=1)
+        with c3:
+            st.write("")
+            st.button("Actualizar", type="primary", use_container_width=True)
+        semanas_sel = []
+        meses_sel = []
+    elif page in ["Reporte Semanal", "Conversión", "Recuperación Económica", "Recorridos"]:
+        semanas = []
+        if not op_all.empty and "Semana ISO" in op_all:
+            semanas += op_all["Semana ISO"].dropna().astype(int).tolist()
+        if not co_all.empty and "Semana ISO" in co_all:
+            semanas += co_all["Semana ISO"].dropna().astype(int).tolist()
+        semanas = sorted(set(semanas))
+        default_sem = [int(today.isocalendar().week)] if int(today.isocalendar().week) in semanas else semanas[-4:]
+        c1, c2, c3 = st.columns([2.1, 2.1, .9])
+        with c1:
+            f_tienda = st.multiselect("Tienda", tiendas, placeholder="Todas las tiendas")
+        with c2:
+            semanas_sel = st.multiselect("Semana ISO", semanas, default=default_sem)
+        with c3:
+            st.write("")
+            st.button("Actualizar", type="primary", use_container_width=True)
+        periodo = "Semanas seleccionadas"
+        meses_sel = []
+    elif page in ["Reporte Mensual", "Macro"]:
+        meses = []
+        if not op_all.empty and "Mes" in op_all:
+            meses += op_all["Mes"].dropna().astype(str).tolist()
+        if not co_all.empty and "Mes" in co_all:
+            meses += co_all["Mes"].dropna().astype(str).tolist()
+        meses = sorted(set(meses))
+        default_mes = [today.strftime("%Y-%m")] if today.strftime("%Y-%m") in meses else meses[-1:]
+        c1, c2, c3 = st.columns([2.1, 2.1, .9])
+        with c1:
+            f_tienda = st.multiselect("Tienda", tiendas, placeholder="Todas las tiendas")
+        with c2:
+            meses_sel = st.multiselect("Mes", meses, default=default_mes)
+        with c3:
+            st.write("")
+            st.button("Actualizar", type="primary", use_container_width=True)
+        periodo = "Meses seleccionados"
+        semanas_sel = []
+    elif page in ["Productividad", "Rankings"]:
+        colaboradores = sorted(op_all["Nombre"].dropna().astype(str).unique().tolist()) if not op_all.empty and "Nombre" in op_all else []
+        c1, c2, c3 = st.columns([2.0, 2.0, .9])
+        with c1:
+            f_tienda = st.multiselect("Tienda", tiendas, placeholder="Todas las tiendas")
+        with c2:
+            f_colaborador = st.multiselect("Colaborador", colaboradores, placeholder="Todos los colaboradores")
+        with c3:
+            st.write("")
+            st.button("Actualizar", type="primary", use_container_width=True)
+        periodo = "Todo el archivo"
+        semanas_sel = []
+        meses_sel = []
+    else:
+        c1, c2 = st.columns([2.1, .9])
+        with c1:
+            f_tienda = st.multiselect("Tienda", tiendas, placeholder="Todas las tiendas")
+        with c2:
+            st.write("")
+            st.button("Actualizar", type="primary", use_container_width=True)
+        periodo = "Todo el archivo"
+        semanas_sel = []
+        meses_sel = []
+    st.markdown("</div>", unsafe_allow_html=True)
 
-op, co = filter_period(op_base, co_base, periodo)
+    op_base = op_all.copy()
+    co_base = co_all.copy()
+
+    if f_tienda:
+        if not op_base.empty and "Tienda" in op_base:
+            op_base = op_base[op_base["Tienda"].isin(f_tienda)]
+        if not co_base.empty and "Tienda" in co_base:
+            co_base = co_base[co_base["Tienda"].isin(f_tienda)]
+
+    if page in ["Productividad", "Rankings"] and "f_colaborador" in locals() and f_colaborador:
+        if not op_base.empty and "Nombre" in op_base:
+            op_base = op_base[op_base["Nombre"].isin(f_colaborador)]
+
+    if semanas_sel:
+        if not op_base.empty and "Semana ISO" in op_base:
+            op_base = op_base[op_base["Semana ISO"].isin(semanas_sel)]
+        if not co_base.empty and "Semana ISO" in co_base:
+            co_base = co_base[co_base["Semana ISO"].isin(semanas_sel)]
+        return op_base, co_base, op_base, co_base
+
+    if meses_sel:
+        if not op_base.empty and "Mes" in op_base:
+            op_base = op_base[op_base["Mes"].isin(meses_sel)]
+        if not co_base.empty and "Mes" in co_base:
+            co_base = co_base[co_base["Mes"].isin(meses_sel)]
+        return op_base, co_base, op_base, co_base
+
+    op, co = filter_period(op_base, co_base, periodo)
+    return op_base, co_base, op, co
+
+
+op_base, co_base, op, co = render_filters(page, op_all, co_all, tiendas)
+
 resumen = resumen_ejecutivo(op, co)
 detalle = resumen_tienda(op, co)
 sem_df = resumen_semana(op_base, co_base)
@@ -962,7 +1116,7 @@ goals = load_goals()
 def dashboard():
     hero(resumen, len(detalle) if detalle is not None else 0)
     if detalle is not None and detalle.empty:
-        st.warning("No hay información para la tienda/filtro seleccionado. Cambia el filtro o revisa que la tienda exista igual en el Excel.")
+        st.warning("No hay información para los filtros seleccionados. Revisa tienda, semana o mes.")
     kpis(resumen)
     section("Últimas 4 semanas", "Ingresos vs semana anterior, % habilitado y % ubicado sobre ingresos.")
     week_cards(sem_df)
@@ -1048,11 +1202,11 @@ def conversion_page():
     section("Conversión Semanal Dev → Venta", "La venta sólo cuenta si ocurre en la misma Semana ISO de la devolución.")
     st.info("Si el archivo comercial no contiene fecha válida, se muestra acumulado como Semana 0. Para calcular Semana ISO automáticamente, valida una columna de fecha.")
     st.markdown('<div class="kpi-grid">', unsafe_allow_html=True)
-    kpi_card("Dev Pzs Semana", fmt_num(conv_kpis.get("Dev Pzs", 0)), "↩", PRICE_BLUE, "Devolución", 100)
-    kpi_card("Conversión Pzs", fmt_num(conv_kpis.get("Conversión Pzs", 0)), "🔄", PRICE_GREEN, "Misma semana", conv_kpis.get("% Conversión", 0))
-    kpi_card("Conversión $", fmt_money(conv_kpis.get("Conversión $", 0)), "$", PRICE_PURPLE, "Venta recuperada", 100)
-    kpi_card("% Conversión", fmt_pct(conv_kpis.get("% Conversión", 0)), "%", PRICE_CYAN, "Dev → Venta", conv_kpis.get("% Conversión", 0))
-    kpi_card("Pendiente Pzs", fmt_num(conv_kpis.get("Pendiente Pzs", 0)), "⏱", PRICE_ORANGE, "Por convertir", 100 - conv_kpis.get("% Conversión", 0))
+    kpi_card("Dev Pzs Semana", fmt_num(conv_kpis.get("Dev Pzs", 0)), "↩", PRICE_BLUE, "Total devuelto semana", 100)
+    kpi_card("Conversión Dev → Venta Pzs", fmt_num(conv_kpis.get("Conversión Pzs", 0)), "🔄", PRICE_GREEN, "Misma semana ISO", conv_kpis.get("% Conversión", 0))
+    kpi_card("Conversión Dev → Venta $", fmt_money(conv_kpis.get("Conversión $", 0)), "$", PRICE_PURPLE, "Importe recuperado", 100)
+    kpi_card("% Conversión Semanal Dev → Venta", fmt_pct(conv_kpis.get("% Conversión", 0)), "%", PRICE_CYAN, "Conversión / Dev", conv_kpis.get("% Conversión", 0))
+    kpi_card("Pendiente por Convertir Pzs", fmt_num(conv_kpis.get("Pendiente Pzs", 0)), "⏱", PRICE_ORANGE, "Dev - conversión", 100 - conv_kpis.get("% Conversión", 0))
     st.markdown('</div>', unsafe_allow_html=True)
     panel("Detalle de conversión", conv_df, height=430, editable=is_admin)
     excel_button(conv_df, "conversion_semanal_dev_venta.xlsx")
@@ -1062,7 +1216,7 @@ def recuperacion():
     section("Recuperación Económica", "Importe recuperado y pendiente.")
     st.markdown('<div class="kpi-grid">', unsafe_allow_html=True)
     kpi_card("Recuperación $", fmt_money(conv_kpis.get("Conversión $", 0)), "$", PRICE_GREEN, "Venta recuperada", 100)
-    kpi_card("No Convertido $", fmt_money(conv_kpis.get("No Convertido $", 0)), "⏱", PRICE_ORANGE, "Pendiente", 100)
+    kpi_card("Venta No Convertida $", fmt_money(conv_kpis.get("No Convertido $", 0)), "⏱", PRICE_ORANGE, "Dev sin venta misma semana", 100)
     kpi_card("% Conversión", fmt_pct(conv_kpis.get("% Conversión", 0)), "%", PRICE_CYAN, "Piezas", conv_kpis.get("% Conversión", 0))
     st.markdown('</div>', unsafe_allow_html=True)
     panel("Detalle económico", conv_df, height=430, editable=is_admin)
@@ -1131,6 +1285,7 @@ def criterios_page():
         st.write("Operación:", list(op_all.columns))
         st.write("Comercial:", list(co_all.columns))
         st.write("Hojas:", sheet_names)
+        st.write("Mapa de nombres desde Plantilla:", nombre_map)
 
 
 def configuracion_page():
