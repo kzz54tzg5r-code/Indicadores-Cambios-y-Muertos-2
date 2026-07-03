@@ -600,31 +600,31 @@ def apply_styles():
     /* Encabezados de tablas en azul con letras blancas */
     div[data-testid="stDataFrame"] [data-testid="stTableStyledTable"] thead tr th,
     div[data-testid="stDataFrame"] thead tr th,
-    div[data-testid="stDataFrame"] [role="columnheader"] {
+    div[data-testid="stDataFrame"] [role="columnheader"] {{
         background:#10245F !important;
         color:#FFFFFF !important;
         font-weight:800 !important;
         border-color:#10245F !important;
-    }
-    div[data-testid="stDataFrame"] [role="columnheader"] * {
+    }}
+    div[data-testid="stDataFrame"] [role="columnheader"] * {{
         color:#FFFFFF !important;
         fill:#FFFFFF !important;
-    }
-    div[data-testid="stDataEditor"] [role="columnheader"] {
+    }}
+    div[data-testid="stDataEditor"] [role="columnheader"] {{
         background:#10245F !important;
         color:#FFFFFF !important;
         font-weight:800 !important;
         border-color:#10245F !important;
-    }
-    div[data-testid="stDataEditor"] [role="columnheader"] * {
+    }}
+    div[data-testid="stDataEditor"] [role="columnheader"] * {{
         color:#FFFFFF !important;
         fill:#FFFFFF !important;
-    }
+    }}
     /* Tablas más limpias */
-    div[data-testid="stDataFrame"], div[data-testid="stDataEditor"] {
+    div[data-testid="stDataFrame"], div[data-testid="stDataEditor"] {{
         border-radius:12px !important;
         overflow:hidden !important;
-    }
+    }}
 
     @media (max-width:1200px) {{
         .top-header {{ grid-template-columns:110px 1fr; }}
