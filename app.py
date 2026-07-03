@@ -468,44 +468,7 @@ def apply_styles():
     .login-sub {{ color:#6B7280; font-size:16px; font-weight:600; margin-bottom:20px; }}
     .login-alert {{ background:#EEF5FF; border:1px solid #DBEAFE; color:{PRICE_BLUE}; border-radius:16px; padding:16px; font-weight:750; margin-bottom:18px; }}
 
-    /* Barra tipo tablero comercial */
-    div[data-testid="stRadio"] > div {{
-        background:#14245F !important;
-        border-top:4px solid #EC007C !important;
-        border-radius:0 !important;
-        padding:0 !important;
-        gap:0 !important;
-        overflow-x:auto !important;
-        white-space:nowrap !important;
-        flex-wrap:nowrap !important;
-        margin:0 -1.6rem 18px -1.6rem !important;
-        box-shadow:0 10px 22px rgba(20,36,95,.18);
-    }}
-    div[data-testid="stRadio"] label {{
-        background:#14245F !important;
-        color:rgba(255,255,255,.68) !important;
-        padding:15px 24px !important;
-        border-radius:0 !important;
-        border-bottom:4px solid transparent !important;
-        font-weight:900 !important;
-        min-width:max-content !important;
-    }}
-    div[data-testid="stRadio"] label * {{
-        color:rgba(255,255,255,.68) !important;
-    }}
-    div[data-testid="stRadio"] label:hover {{
-        background:#1B2F75 !important;
-    }}
-    div[data-testid="stRadio"] label:hover * {{
-        color:rgba(255,255,255,.90) !important;
-    }}
-    div[data-testid="stRadio"] label:has(input:checked) {{
-        background:#1B2F75 !important;
-        border-bottom-color:#EC007C !important;
-    }}
-    div[data-testid="stRadio"] label:has(input:checked) * {{
-        color:#FFFFFF !important;
-    }}
+    /* Navegación por st.tabs estable */
 
 
     /* Ajuste visual ligero estilo tablero ejecutivo */
@@ -642,6 +605,41 @@ def apply_styles():
         overflow:hidden !important;
     }}
 
+
+    /* Barra de pestañas estable */
+    div[data-testid="stTabs"] {
+        margin:0 -1.6rem 18px -1.6rem !important;
+    }
+    div[data-testid="stTabs"] div[role="tablist"] {
+        background:#10245F !important;
+        border-top:4px solid #EC007C !important;
+        border-radius:0 !important;
+        gap:0 !important;
+        overflow-x:auto !important;
+        white-space:nowrap !important;
+        box-shadow:0 8px 18px rgba(16,36,95,.16);
+    }
+    div[data-testid="stTabs"] button[role="tab"] {
+        background:#10245F !important;
+        color:rgba(255,255,255,.70) !important;
+        padding:14px 22px !important;
+        border-radius:0 !important;
+        border-bottom:4px solid transparent !important;
+        font-weight:800 !important;
+        font-size:14px !important;
+    }
+    div[data-testid="stTabs"] button[role="tab"] p {
+        color:rgba(255,255,255,.70) !important;
+        font-weight:800 !important;
+    }
+    div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
+        background:#142E73 !important;
+        border-bottom-color:#EC007C !important;
+    }
+    div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] p {
+        color:#FFFFFF !important;
+    }
+
     @media (max-width:1200px) {{
         .top-header {{ grid-template-columns:110px 1fr; }}
         .header-controls {{ display:none; }}
@@ -697,20 +695,9 @@ def login_screen():
 
 
 def nav_bar():
+    # Se mantiene para compatibilidad, pero la navegación real usa st.tabs al final.
     items = get_tab_order()
-    if "page" not in st.session_state:
-        st.session_state.page = items[0] if items else "Dashboard"
-    current = st.session_state.page if st.session_state.page in items else (items[0] if items else "Dashboard")
-    selected = st.radio(
-        "Pestañas",
-        items,
-        index=items.index(current),
-        horizontal=True,
-        label_visibility="collapsed",
-        key="page_selector_radio"
-    )
-    st.session_state.page = selected or current
-    return st.session_state.page
+    return items[0] if items else "Dashboard"
 
 def section(title, subtitle=""):
     st.markdown(f'<div class="section-title">{title}</div><div class="section-subtitle">{subtitle}</div>', unsafe_allow_html=True)
@@ -1408,7 +1395,7 @@ if not ACTIVE_FILE.exists():
     st.warning("Carga un archivo Excel desde el panel lateral para iniciar.")
     st.stop()
 
-page = nav_bar()
+page = nav_bar()  # compatibilidad
 
 try:
     op_all, co_all, diag_df, sheet_names, nombre_map = load_normalized(str(ACTIVE_FILE), ACTIVE_FILE.stat().st_mtime)
@@ -1599,37 +1586,56 @@ def reporte_mensual():
 
 def conversion_page():
     section("Conversión Semanal Dev → Venta", "La venta sólo cuenta si ocurre en la misma Semana ISO de la devolución. Se consideran todas las tiendas.")
-    semanas = sorted(co_all["Semana ISO"].dropna().astype(int).unique().tolist()) if not co_all.empty and "Semana ISO" in co_all else []
-    f_sem = st.multiselect("Semana ISO", semanas, default=semanas[-1:] if semanas else [], key="conv_sem")
+    if co_all is None or co_all.empty:
+        st.warning("No se detectó información comercial para calcular conversión. Revisa que existan columnas Dev Pzs, Vta Pzs, Vta Imp, Tienda, ID/Modelo, Color y Fecha/Semana ISO.")
+        return
+
+    semanas = sorted(co_all["Semana ISO"].dropna().astype(int).unique().tolist()) if "Semana ISO" in co_all else []
+    if not semanas:
+        st.warning("No se detectaron semanas ISO en la hoja comercial.")
+        return
+
+    f_sem = st.multiselect("Semana ISO", semanas, default=semanas[-1:], key="conv_sem")
     co_c = co_all.copy()
-    if f_sem and not co_c.empty and "Semana ISO" in co_c:
+    if f_sem and "Semana ISO" in co_c:
         co_c = co_c[co_c["Semana ISO"].isin(f_sem)]
+
     conv_page_df, conv_page_kpis = conversion(co_c)
     st.info("Regla aplicada: Semana ISO + Tienda + ID/Modelo + Color. No se mezclan semanas aunque consultes varias semanas o un mes.")
-    st.markdown('<div class="kpi-grid">', unsafe_allow_html=True)
-    kpi_card("Dev Pzs Semana", fmt_num(conv_page_kpis.get("Dev Pzs", 0)), "↩", PRICE_BLUE, "Total devuelto semana", 100)
-    kpi_card("Conversión Dev → Venta Pzs", fmt_num(conv_page_kpis.get("Conversión Pzs", 0)), "🔄", PRICE_GREEN, "Misma semana ISO", conv_page_kpis.get("% Conversión", 0))
-    kpi_card("Conversión Dev → Venta $", fmt_money(conv_page_kpis.get("Conversión $", 0)), "$", PRICE_PURPLE, "Importe recuperado", 100)
-    kpi_card("% Conversión Semanal Dev → Venta", fmt_pct(conv_page_kpis.get("% Conversión", 0)), "%", PRICE_CYAN, "Conversión / Dev", conv_page_kpis.get("% Conversión", 0))
-    kpi_card("Pendiente por Convertir Pzs", fmt_num(conv_page_kpis.get("Pendiente Pzs", 0)), "⏱", PRICE_ORANGE, "Dev - conversión", 100 - conv_page_kpis.get("% Conversión", 0))
-    st.markdown('</div>', unsafe_allow_html=True)
+
+    c1, c2, c3, c4, c5 = st.columns(5)
+    c1.metric("Dev Pzs Semana", fmt_num(conv_page_kpis.get("Dev Pzs", 0)))
+    c2.metric("Conversión Pzs", fmt_num(conv_page_kpis.get("Conversión Pzs", 0)))
+    c3.metric("Conversión $", fmt_money(conv_page_kpis.get("Conversión $", 0)))
+    c4.metric("% Conversión", fmt_pct(conv_page_kpis.get("% Conversión", 0)))
+    c5.metric("Pendiente Pzs", fmt_num(conv_page_kpis.get("Pendiente Pzs", 0)))
+
     pdf_placeholder("Conversion Dev Venta")
     panel("Detalle de conversión", conv_page_df, height=430, editable=is_admin)
     excel_button(conv_page_df, "conversion_semanal_dev_venta.xlsx")
 
 def recuperacion():
     section("Recuperación Económica", "Importe recuperado y pendiente. Se consideran todas las tiendas.")
-    semanas = sorted(co_all["Semana ISO"].dropna().astype(int).unique().tolist()) if not co_all.empty and "Semana ISO" in co_all else []
-    f_sem = st.multiselect("Semana ISO", semanas, default=semanas[-1:] if semanas else [], key="rec_sem")
+    if co_all is None or co_all.empty:
+        st.warning("No se detectó información comercial para calcular recuperación económica.")
+        return
+
+    semanas = sorted(co_all["Semana ISO"].dropna().astype(int).unique().tolist()) if "Semana ISO" in co_all else []
+    if not semanas:
+        st.warning("No se detectaron semanas ISO en la hoja comercial.")
+        return
+
+    f_sem = st.multiselect("Semana ISO", semanas, default=semanas[-1:], key="rec_sem")
     co_r = co_all.copy()
-    if f_sem and not co_r.empty and "Semana ISO" in co_r:
+    if f_sem and "Semana ISO" in co_r:
         co_r = co_r[co_r["Semana ISO"].isin(f_sem)]
+
     rec_df, rec_kpis = conversion(co_r)
-    st.markdown('<div class="kpi-grid">', unsafe_allow_html=True)
-    kpi_card("Recuperación $", fmt_money(rec_kpis.get("Conversión $", 0)), "$", PRICE_GREEN, "Venta recuperada misma semana", 100)
-    kpi_card("Venta No Convertida $", fmt_money(rec_kpis.get("No Convertido $", 0)), "⏱", PRICE_ORANGE, "Dev sin venta misma semana", 100)
-    kpi_card("% Conversión", fmt_pct(rec_kpis.get("% Conversión", 0)), "%", PRICE_CYAN, "Piezas", rec_kpis.get("% Conversión", 0))
-    st.markdown('</div>', unsafe_allow_html=True)
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Recuperación $", fmt_money(rec_kpis.get("Conversión $", 0)))
+    c2.metric("Venta No Convertida $", fmt_money(rec_kpis.get("No Convertido $", 0)))
+    c3.metric("% Conversión", fmt_pct(rec_kpis.get("% Conversión", 0)))
+
     pdf_placeholder("Recuperacion Economica")
     panel("Detalle económico", rec_df, height=430, editable=is_admin)
     excel_button(rec_df, "recuperacion_economica.xlsx")
@@ -1924,7 +1930,23 @@ ROUTES = {
     "Usuarios": usuarios_page,
 }
 
-ROUTES.get(page, dashboard)()
+tab_items = [t for t in get_tab_order() if t in ROUTES]
+tabs = st.tabs(tab_items)
+
+# st.tabs construye todas las pestañas visualmente, pero sólo ejecutamos el contenido
+# de una pestaña persistida por sesión para evitar que todas las secciones pesadas carguen a la vez.
+# Como Streamlit no expone la pestaña activa en Python, colocamos botones ligeros dentro de cada tab.
+if "active_tab_page" not in st.session_state:
+    st.session_state.active_tab_page = tab_items[0] if tab_items else "Dashboard"
+
+for tab, tab_name in zip(tabs, tab_items):
+    with tab:
+        if st.button(f"Abrir {tab_name}", key=f"open_{tab_name}", use_container_width=True):
+            st.session_state.active_tab_page = tab_name
+            st.rerun()
+        if st.session_state.active_tab_page == tab_name:
+            ROUTES.get(tab_name, dashboard)()
+
 
 st.markdown("---")
 st.caption("CONFIDENCIAL | Price Shoes | Operaciones Ropa")

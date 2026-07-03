@@ -1,8 +1,9 @@
-# Indicadores Cambios y Muertos v8.6.3
+# Indicadores Cambios y Muertos v8.6.4
 
-Corrección solicitada:
-- La información de tiendas se toma directamente de la columna "Tienda" de la hoja "Resultados productividad".
-- Se evita confundir "Fecha s" con "Fecha".
-- Diagnóstico muestra qué columnas detectó por hoja: Tienda, Fecha y Número de Piezas.
-- Por Día muestra cuántos registros detectó para la fecha seleccionada.
-- Mantiene mover pestañas desde Configuración.
+Correcciones:
+- Evita que la app se quede pensando al cambiar pestañas.
+- Sustituye radio de navegación por st.tabs estable.
+- Cada pestaña tiene botón Abrir para ejecutar sólo esa sección y evitar carga simultánea pesada.
+- Conversión y Recuperación ya no se quedan cargando si no existe hoja comercial; muestran aviso.
+- Mantiene orden de pestañas configurable en Configuración.
+- Mantiene columnas de tienda desde Resultados productividad.
