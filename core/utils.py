@@ -1,55 +1,50 @@
+
 from __future__ import annotations
-
-import re
-import unicodedata
 import pandas as pd
+import numpy as np
+import unicodedata
+import re
 
-def normalizar_texto(valor) -> str:
-    texto = str(valor).strip().lower()
-    texto = unicodedata.normalize("NFKD", texto)
-    texto = texto.encode("ascii", errors="ignore").decode("utf-8")
-    return re.sub(r"[^a-z0-9]+", "", texto)
 
-def buscar_columna(df: pd.DataFrame, aliases: list[str]) -> str | None:
-    if df is None or df.empty:
-        return None
-    mapa = {normalizar_texto(col): col for col in df.columns}
-    for alias in aliases:
-        clave = normalizar_texto(alias)
-        if clave in mapa:
-            return mapa[clave]
-    for col in df.columns:
-        col_norm = normalizar_texto(col)
-        for alias in aliases:
-            if normalizar_texto(alias) in col_norm:
-                return col
-    return None
+def norm_text(x) -> str:
+    if x is None:
+        return ""
+    s = str(x).strip()
+    s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode("ascii")
+    s = re.sub(r"\s+", " ", s)
+    return s.upper()
 
-def convertir_numero(serie) -> pd.Series:
-    return pd.to_numeric(serie, errors="coerce").fillna(0)
 
-def dividir_seguro(a, b) -> float:
+def to_number(s):
     try:
-        a = float(a or 0)
-        b = float(b or 0)
-        return a / b if b else 0
+        return pd.to_numeric(s, errors="coerce").fillna(0)
     except Exception:
         return 0
 
-def formato_numero(valor) -> str:
+
+def fmt_num(v):
     try:
-        return f"{float(valor):,.0f}"
+        return f"{float(v):,.0f}"
     except Exception:
         return "0"
 
-def formato_pesos(valor) -> str:
+
+def fmt_pct(v):
     try:
-        return f"${float(valor):,.0f}"
+        return f"{float(v):,.1f}%"
+    except Exception:
+        return "0.0%"
+
+
+def fmt_money(v):
+    try:
+        return f"${float(v):,.0f}"
     except Exception:
         return "$0"
 
-def formato_porcentaje(valor) -> str:
+
+def safe_div(a, b):
     try:
-        return f"{float(valor):,.1f}%"
+        return (float(a) / float(b) * 100) if float(b) else 0
     except Exception:
-        return "0.0%"
+        return 0

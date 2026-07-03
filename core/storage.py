@@ -1,71 +1,86 @@
+
 from __future__ import annotations
 
+from pathlib import Path
+from datetime import datetime
 import json
 import shutil
-from datetime import datetime
-from pathlib import Path
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-DATA_DIR = BASE_DIR / "data"
-UPLOADS_DIR = DATA_DIR / "uploads"
-PERSIST_DIR = DATA_DIR / "persistencia"
-CACHE_DIR = DATA_DIR / "cache"
+UPLOAD_DIR = Path("data/uploads")
+CONFIG_DIR = Path("data/config")
+PERSIST_DIR = Path("data/persistencia")
+ACTIVE_FILE = UPLOAD_DIR / "base_activa.xlsx"
+META_FILE = CONFIG_DIR / "metadata.json"
+USERS_FILE = CONFIG_DIR / "usuarios.json"
+GOALS_FILE = CONFIG_DIR / "metas.json"
 
-LAST_FILE_PATH = PERSIST_DIR / "ultimo_archivo.xlsx"
-METADATA_PATH = PERSIST_DIR / "metadata_archivo.json"
-CONFIG_PATH = PERSIST_DIR / "configuracion.json"
+for p in [UPLOAD_DIR, CONFIG_DIR, PERSIST_DIR]:
+    p.mkdir(parents=True, exist_ok=True)
 
-def asegurar_directorios() -> None:
-    for path in [DATA_DIR, UPLOADS_DIR, PERSIST_DIR, CACHE_DIR]:
-        path.mkdir(parents=True, exist_ok=True)
 
-def guardar_archivo_persistente(uploaded_file):
-    asegurar_directorios()
-    if uploaded_file is None:
-        return None
-    with open(LAST_FILE_PATH, "wb") as file:
-        file.write(uploaded_file.getbuffer())
-    metadata = {
+def save_uploaded_file(uploaded_file):
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    with open(ACTIVE_FILE, "wb") as f:
+        f.write(uploaded_file.getbuffer())
+    meta = {
         "nombre_original": uploaded_file.name,
         "fecha_carga": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "ruta": str(LAST_FILE_PATH),
-        "tamano_bytes": LAST_FILE_PATH.stat().st_size,
     }
-    METADATA_PATH.write_text(json.dumps(metadata, ensure_ascii=False, indent=4), encoding="utf-8")
-    return LAST_FILE_PATH
+    META_FILE.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
 
-def existe_archivo_persistente() -> bool:
-    return LAST_FILE_PATH.exists()
 
-def obtener_archivo_persistente():
-    asegurar_directorios()
-    return LAST_FILE_PATH if LAST_FILE_PATH.exists() else None
+def active_file_exists() -> bool:
+    return ACTIVE_FILE.exists()
 
-def obtener_metadata_archivo() -> dict:
-    if METADATA_PATH.exists():
+
+def get_active_file_path() -> Path | None:
+    return ACTIVE_FILE if ACTIVE_FILE.exists() else None
+
+
+def delete_active_file():
+    if ACTIVE_FILE.exists():
+        ACTIVE_FILE.unlink()
+    if META_FILE.exists():
+        META_FILE.unlink()
+
+
+def get_metadata() -> dict:
+    if META_FILE.exists():
         try:
-            return json.loads(METADATA_PATH.read_text(encoding="utf-8"))
+            return json.loads(META_FILE.read_text(encoding="utf-8"))
         except Exception:
             return {}
     return {}
 
-def borrar_archivo_persistente() -> None:
-    for path in [LAST_FILE_PATH, METADATA_PATH]:
-        if path.exists():
-            path.unlink()
-    if CACHE_DIR.exists():
-        shutil.rmtree(CACHE_DIR)
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
-def cargar_configuracion(default: dict | None = None) -> dict:
-    asegurar_directorios()
-    if CONFIG_PATH.exists():
+def load_users() -> list[dict]:
+    if USERS_FILE.exists():
         try:
-            return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+            data = json.loads(USERS_FILE.read_text(encoding="utf-8"))
+            return data if isinstance(data, list) else []
         except Exception:
-            return default or {}
-    return default or {}
+            return []
+    default = [
+        {"nomina": "admin", "nombre": "Administrador", "permiso": "Administrador", "password": "admin123", "activo": True},
+    ]
+    save_users(default)
+    return default
 
-def guardar_configuracion(config: dict) -> None:
-    asegurar_directorios()
-    CONFIG_PATH.write_text(json.dumps(config, ensure_ascii=False, indent=4), encoding="utf-8")
+
+def save_users(users: list[dict]):
+    USERS_FILE.write_text(json.dumps(users, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def load_goals() -> dict:
+    default = {"productividad_diaria": 784, "recorridos_semanal": 47, "conversion_meta": 90.0}
+    if GOALS_FILE.exists():
+        try:
+            data = json.loads(GOALS_FILE.read_text(encoding="utf-8"))
+            default.update(data)
+        except Exception:
+            pass
+    return default
+
+
+def save_goals(goals: dict):
+    GOALS_FILE.write_text(json.dumps(goals, ensure_ascii=False, indent=2), encoding="utf-8")
