@@ -93,6 +93,8 @@ def init_db():
         "productividad_diaria": "784",
         "recorridos_semanal": "47",
         "conversion_meta": "90.0",
+        "project_stores": json.dumps(["Arco Norte", "Ecatepec", "Miravalle", "Puebla Sur", "Vallejo"], ensure_ascii=False),
+        "tab_order": json.dumps(["Dashboard", "Por Día", "Reporte Semanal", "Reporte Mensual", "Conversión", "Recuperación Económica", "Productividad", "Recorridos", "Rankings", "Macro", "Diagnóstico", "Configuración", "Usuarios"], ensure_ascii=False),
     }.items():
         cur.execute("INSERT OR IGNORE INTO goals VALUES (?, ?)", (k, v))
     conn.commit()
@@ -160,6 +162,56 @@ def save_goals(goals):
         conn.execute("INSERT OR REPLACE INTO goals VALUES (?, ?)", (k, str(v)))
     conn.commit()
     conn.close()
+
+
+
+def get_config_value(key, default=None):
+    init_db()
+    conn = db_conn()
+    row = conn.execute("SELECT value FROM goals WHERE key=?", (key,)).fetchone()
+    conn.close()
+    if row is None:
+        return default
+    return row["value"]
+
+
+def set_config_value(key, value):
+    init_db()
+    conn = db_conn()
+    conn.execute("INSERT OR REPLACE INTO goals VALUES (?, ?)", (key, value))
+    conn.commit()
+    conn.close()
+
+
+def get_project_stores():
+    raw = get_config_value("project_stores", "[]")
+    try:
+        stores = json.loads(raw)
+        return [canon_tienda(x) for x in stores if canon_tienda(x)]
+    except Exception:
+        return ["Arco Norte", "Ecatepec", "Miravalle", "Puebla Sur", "Vallejo"]
+
+
+def save_project_stores(stores):
+    clean = [canon_tienda(x) for x in stores if canon_tienda(x)]
+    set_config_value("project_stores", json.dumps(clean, ensure_ascii=False))
+
+
+def get_tab_order():
+    default = ["Dashboard", "Por Día", "Reporte Semanal", "Reporte Mensual", "Conversión", "Recuperación Económica", "Productividad", "Recorridos", "Rankings", "Macro", "Diagnóstico", "Configuración", "Usuarios"]
+    raw = get_config_value("tab_order", json.dumps(default, ensure_ascii=False))
+    try:
+        order = json.loads(raw)
+        # garantiza que no falte ninguna pestaña
+        return [x for x in order if x in default] + [x for x in default if x not in order]
+    except Exception:
+        return default
+
+
+def save_tab_order(order):
+    default = ["Dashboard", "Por Día", "Reporte Semanal", "Reporte Mensual", "Conversión", "Recuperación Económica", "Productividad", "Recorridos", "Rankings", "Macro", "Diagnóstico", "Configuración", "Usuarios"]
+    clean = [x for x in order if x in default] + [x for x in default if x not in order]
+    set_config_value("tab_order", json.dumps(clean, ensure_ascii=False))
 
 
 def save_uploaded_file(uploaded_file):
@@ -544,6 +596,36 @@ def apply_styles():
         color:#FFFFFF !important;
     }}
 
+
+    /* Encabezados de tablas en azul con letras blancas */
+    div[data-testid="stDataFrame"] [data-testid="stTableStyledTable"] thead tr th,
+    div[data-testid="stDataFrame"] thead tr th,
+    div[data-testid="stDataFrame"] [role="columnheader"] {
+        background:#10245F !important;
+        color:#FFFFFF !important;
+        font-weight:800 !important;
+        border-color:#10245F !important;
+    }
+    div[data-testid="stDataFrame"] [role="columnheader"] * {
+        color:#FFFFFF !important;
+        fill:#FFFFFF !important;
+    }
+    div[data-testid="stDataEditor"] [role="columnheader"] {
+        background:#10245F !important;
+        color:#FFFFFF !important;
+        font-weight:800 !important;
+        border-color:#10245F !important;
+    }
+    div[data-testid="stDataEditor"] [role="columnheader"] * {
+        color:#FFFFFF !important;
+        fill:#FFFFFF !important;
+    }
+    /* Tablas más limpias */
+    div[data-testid="stDataFrame"], div[data-testid="stDataEditor"] {
+        border-radius:12px !important;
+        overflow:hidden !important;
+    }
+
     @media (max-width:1200px) {{
         .top-header {{ grid-template-columns:110px 1fr; }}
         .header-controls {{ display:none; }}
@@ -599,24 +681,10 @@ def login_screen():
 
 
 def nav_bar():
-    items = [
-        "Dashboard",
-        "Por Día",
-        "Reporte Semanal",
-        "Reporte Mensual",
-        "Conversión",
-        "Recuperación Económica",
-        "Productividad",
-        "Recorridos",
-        "Rankings",
-        "Macro",
-        "Diagnóstico",
-        "Configuración",
-        "Usuarios",
-    ]
+    items = get_tab_order()
     if "page" not in st.session_state:
-        st.session_state.page = "Dashboard"
-    current = st.session_state.page if st.session_state.page in items else "Dashboard"
+        st.session_state.page = items[0] if items else "Dashboard"
+    current = st.session_state.page if st.session_state.page in items else (items[0] if items else "Dashboard")
     selected = st.radio(
         "Pestañas",
         items,
@@ -673,18 +741,31 @@ def hero(resumen, tiendas_count=0):
     """, unsafe_allow_html=True)
 
 
+def format_table_for_display(df):
+    if df is None or df.empty:
+        return df
+    out = df.copy()
+    for c in out.columns:
+        if str(c).startswith("%"):
+            out[c] = out[c].apply(lambda x: fmt_pct(x) if pd.notna(x) and str(x) != "" else "0.0%")
+        elif any(k in str(c).lower() for k in ["piezas", "ingresos", "pendiente", "total", "muertos", "cajas", "recolectadas", "habilitadas", "ubicadas"]):
+            if pd.api.types.is_numeric_dtype(out[c]):
+                out[c] = out[c].apply(lambda x: fmt_num(x))
+    return out
+
+
 def safe_df(df, height=360, editable=False):
     if df is None or df.empty:
         st.info("Sin información con los filtros seleccionados.")
         return df
     view = df.head(500)
+    show = format_table_for_display(view)
     if editable:
-        return st.data_editor(view, width="stretch", hide_index=True, height=height, num_rows="dynamic")
-    st.dataframe(view, width="stretch", hide_index=True, height=height)
+        return st.data_editor(show, width="stretch", hide_index=True, height=height, num_rows="dynamic")
+    st.dataframe(show, width="stretch", hide_index=True, height=height)
     if len(df) > 500:
         st.caption(f"Vista previa de 500 filas de {len(df):,}. Descarga Excel para ver todo.")
     return df
-
 
 def panel(title, df=None, height=360, editable=False):
     st.markdown(f'<div class="panel"><div class="panel-title">{title}</div>', unsafe_allow_html=True)
@@ -1055,39 +1136,67 @@ def operational_table(op, co=None, tiendas_base=None, periodo_label="Día"):
 
     rows = []
     for t in tiendas_all:
-        if not op.empty and "Tienda" in op:
-            ot = op[op["Tienda"].map(norm_text) == norm_text(t)]
+        ot = op[op["Tienda"].map(norm_text) == norm_text(t)] if not op.empty and "Tienda" in op else pd.DataFrame()
+
+        if not ot.empty:
+            act = ot["Actividad Realizada"].map(norm_text) if "Actividad Realizada" in ot else pd.Series([""] * len(ot), index=ot.index)
+            motivo = ot["Motivo de ingreso"].map(norm_text) if "Motivo de ingreso" in ot else pd.Series([""] * len(ot), index=ot.index)
+
+            piezas = ot["Número de Piezas"] if "Número de Piezas" in ot else pd.Series([0] * len(ot), index=ot.index)
+
+            dev = float(piezas[(motivo.str.contains("DEV|ADUANA|CAMBIO", na=False)) | (act.str.contains("ADUANA|CAMBIO|DEV", na=False))].sum())
+            muertos = float(piezas[(motivo.str.contains("MUERTO", na=False)) | (act.str.contains("MUERTO", na=False))].sum())
+            cajas = float(piezas[(motivo.str.contains("CAJA", na=False)) | (act.str.contains("CAJA", na=False))].sum())
+            probador = float(piezas[(motivo.str.contains("PROB", na=False)) | (act.str.contains("PROB", na=False))].sum())
+
+            total_calc = dev + muertos + cajas + probador
+            total_ingresos = total_calc if total_calc > 0 else float(piezas.sum())
+
+            recolectadas = float(piezas[act.str.contains("RECOLECT|RECOLEC", na=False)].sum())
+            if recolectadas == 0:
+                recolectadas = total_ingresos
+
+            habilitadas = float(ot["Acondicionado"].sum()) if "Acondicionado" in ot else 0
+            ubicadas = float(ot["Ubicado"].sum()) if "Ubicado" in ot else 0
+            pend_ante = float(ot["Pendiente Anteayer"].sum()) if "Pendiente Anteayer" in ot else 0
         else:
-            ot = pd.DataFrame()
+            dev = muertos = cajas = probador = total_ingresos = recolectadas = habilitadas = ubicadas = pend_ante = 0
 
-        ingresos = float(ot["Número de Piezas"].sum()) if not ot.empty and "Número de Piezas" in ot else 0
-        acond = float(ot["Acondicionado"].sum()) if not ot.empty and "Acondicionado" in ot else 0
-        ubic = float(ot["Ubicado"].sum()) if not ot.empty and "Ubicado" in ot else 0
-        pend_ante = float(ot["Pendiente Anteayer"].sum()) if not ot.empty and "Pendiente Anteayer" in ot else 0
-
-        base = ingresos + pend_ante
-        pend_ayer = max(base - ubic, 0)
+        base = total_ingresos + pend_ante
+        pend_hab = max(base - habilitadas, 0)
+        pend_ub = max(base - ubicadas, 0)
 
         rows.append({
             "Tienda": t,
-            "Piezas Ingresadas": ingresos,
-            "Piezas Acondicionadas": acond,
-            "Piezas Ubicadas": ubic,
-            "Pendientes de ayer": pend_ayer,
-            "% Habilitado": safe_div(acond, base),
-            "% Ubicado": safe_div(ubic, base),
-            "Pendientes del día de anteayer": pend_ante,
+            "Ingreso Aduana (Dev pzs)": dev,
+            "Muertos Piso Venta": muertos,
+            "Ingresos Cajas": cajas,
+            "Probador": probador,
+            "Total Ingresos": total_ingresos,
+            "Pzas Recolectadas": recolectadas,
+            "Pzas Habilitadas": habilitadas,
+            "Pendiente por Habilitar": pend_hab,
+            "% Acondicionado": safe_div(habilitadas, base),
+            "Pzas Ubicadas": ubicadas,
+            "Pendiente por Ubicar": pend_ub,
+            "% Ubicado": safe_div(ubicadas, base),
+            "Pendientes del día anterior": pend_ante,
         })
 
     df = pd.DataFrame(rows)
     if not df.empty:
         if not tiendas_base:
-            df = df[df[["Piezas Ingresadas", "Piezas Acondicionadas", "Piezas Ubicadas", "Pendientes del día de anteayer"]].sum(axis=1) != 0]
-        for c in ["Piezas Ingresadas", "Piezas Acondicionadas", "Piezas Ubicadas", "Pendientes del día de anteayer", "Pendientes de ayer"]:
+            num_cols = [c for c in df.columns if c != "Tienda"]
+            df = df[df[num_cols].sum(axis=1) != 0]
+        int_cols = [
+            "Ingreso Aduana (Dev pzs)", "Muertos Piso Venta", "Ingresos Cajas", "Probador",
+            "Total Ingresos", "Pzas Recolectadas", "Pzas Habilitadas", "Pendiente por Habilitar",
+            "Pzas Ubicadas", "Pendiente por Ubicar", "Pendientes del día anterior"
+        ]
+        for c in int_cols:
             df[c] = df[c].fillna(0).round(0).astype(int)
-        for c in ["% Habilitado", "% Ubicado"]:
+        for c in ["% Acondicionado", "% Ubicado"]:
             df[c] = df[c].fillna(0).round(1)
-        df = df[["Tienda", "Piezas Ingresadas", "Piezas Acondicionadas", "Piezas Ubicadas", "Pendientes de ayer", "% Habilitado", "% Ubicado", "Pendientes del día de anteayer"]]
     return df
 
 def add_pending_previous_day(op_all, selected_date):
@@ -1119,13 +1228,16 @@ def combined_chart(df, title):
         st.info("Sin información para graficar.")
         return
     p = df.copy()
+    x = p["Tienda"]
+    ingresos_col = "Total Ingresos" if "Total Ingresos" in p else "Piezas Ingresadas"
+    hab_col = "Pzas Habilitadas" if "Pzas Habilitadas" in p else "Piezas Acondicionadas"
+    ubi_col = "Pzas Ubicadas" if "Pzas Ubicadas" in p else "Piezas Ubicadas"
     fig = go.Figure()
-    fig.add_trace(go.Bar(x=p["Tienda"], y=p["Piezas Acondicionadas"], name="Acondicionado"))
-    fig.add_trace(go.Bar(x=p["Tienda"], y=p["Piezas Ubicadas"], name="Ubicado"))
-    fig.add_trace(go.Scatter(x=p["Tienda"], y=p["Piezas Ingresadas"], mode="lines+markers+text", name="Ingresos", text=p["Piezas Ingresadas"].round(0)))
+    fig.add_trace(go.Bar(x=x, y=p[hab_col], name="Habilitado"))
+    fig.add_trace(go.Bar(x=x, y=p[ubi_col], name="Ubicado"))
+    fig.add_trace(go.Scatter(x=x, y=p[ingresos_col], mode="lines+markers+text", name="Ingresos", text=p[ingresos_col].round(0)))
     fig.update_layout(title=title, barmode="group", height=430, margin=dict(l=10, r=10, t=45, b=90))
     st.plotly_chart(fig, width="stretch")
-
 
 def pdf_placeholder(title):
     # PDF básico temporal: descarga resumen/tablas principales. Evita romper Streamlit por reportlab.
@@ -1297,14 +1409,14 @@ goals = load_goals()
 
 def dashboard():
     section("Dashboard Ejecutivo", "Vista general de indicadores principales.")
-    hero(resumen, len(resumen_tienda(op_all, co_all)))
+    hero(resumen, len(resumen_tienda(op_all[op_all["Tienda"].isin(project_stores)] if not op_all.empty and "Tienda" in op_all else op_all, co_all)))
     kpis(resumen_ejecutivo(op_all, co_all))
     pdf_placeholder("Dashboard Ejecutivo")
     section("Últimas 4 semanas", "Ingresos vs semana anterior, % habilitado y % ubicado sobre ingresos.")
     week_cards(resumen_semana(op_all, co_all))
     c1, c2 = st.columns(2)
     with c1:
-        rank_panel("Top tiendas por ingresos", resumen_tienda(op_all, co_all), "Ingresos", "Tienda", PRICE_BLUE)
+        rank_panel("Top tiendas por ingresos", resumen_tienda(op_all[op_all["Tienda"].isin(project_stores)] if not op_all.empty and "Tienda" in op_all else op_all, co_all), "Ingresos", "Tienda", PRICE_BLUE)
     with c2:
         rank_panel("Top colaboradores", productividad(op_all), "Productividad", "Nombre" if not productividad(op_all).empty and "Nombre" in productividad(op_all) else "Tienda", PRICE_GREEN)
     st.download_button(
@@ -1328,22 +1440,23 @@ def dia_anterior():
         st.warning("No hay registros operativos para la fecha seleccionada. Selecciona una fecha que exista en el Excel.")
         if fechas:
             st.caption("Fechas disponibles más recientes: " + ", ".join([str(f) for f in fechas[-7:]]))
-    table = operational_table(op_d, None, tiendas_base=tiendas, periodo_label="Día")
+    table = operational_table(op_d, None, tiendas_base=project_stores, periodo_label="Día")
     if not table.empty and not prev_pend.empty:
-        table = table.drop(columns=["Pendientes del día de anteayer"], errors="ignore").merge(prev_pend, on="Tienda", how="left")
+        table = table.drop(columns=["Pendientes del día anterior"], errors="ignore").merge(prev_pend, on="Tienda", how="left")
         table["Pendiente Anteayer"] = table["Pendiente Anteayer"].fillna(0)
-        table = table.rename(columns={"Pendiente Anteayer": "Pendientes del día de anteayer"})
-        base = table["Piezas Ingresadas"] + table["Pendientes del día de anteayer"]
-        table["Pendientes de ayer"] = (base - table["Piezas Ubicadas"]).clip(lower=0).round(0).astype(int)
-        table["% Habilitado"] = [safe_div(a, b) for a, b in zip(table["Piezas Acondicionadas"], base)]
-        table["% Ubicado"] = [safe_div(u, b) for u, b in zip(table["Piezas Ubicadas"], base)]
-        table["% Habilitado"] = table["% Habilitado"].round(1)
+        table = table.rename(columns={"Pendiente Anteayer": "Pendientes del día anterior"})
+        base = table["Total Ingresos"] + table["Pendientes del día anterior"]
+        table["Pendiente por Habilitar"] = (base - table["Pzas Habilitadas"]).clip(lower=0).round(0).astype(int)
+        table["Pendiente por Ubicar"] = (base - table["Pzas Ubicadas"]).clip(lower=0).round(0).astype(int)
+        table["% Acondicionado"] = [safe_div(a, b) for a, b in zip(table["Pzas Habilitadas"], base)]
+        table["% Ubicado"] = [safe_div(u, b) for u, b in zip(table["Pzas Ubicadas"], base)]
+        table["% Acondicionado"] = table["% Acondicionado"].round(1)
         table["% Ubicado"] = table["% Ubicado"].round(1)
 
     res = {
-        "Ingresos": table["Piezas Ingresadas"].sum() if not table.empty else 0,
-        "Acondicionado": table["Piezas Acondicionadas"].sum() if not table.empty else 0,
-        "Ubicado": table["Piezas Ubicadas"].sum() if not table.empty else 0,
+        "Ingresos": table["Total Ingresos"].sum() if not table.empty and "Total Ingresos" in table else 0,
+        "Acondicionado": table["Pzas Habilitadas"].sum() if not table.empty and "Pzas Habilitadas" in table else 0,
+        "Ubicado": table["Pzas Ubicadas"].sum() if not table.empty and "Pzas Ubicadas" in table else 0,
     }
     res["Pendiente"] = max(res["Ingresos"] - res["Ubicado"], 0)
     res["% Acondicionado"] = safe_div(res["Acondicionado"], res["Ingresos"])
@@ -1360,7 +1473,7 @@ def reporte_semanal():
     semanas = sorted(op_all["Semana ISO"].dropna().astype(int).unique().tolist()) if not op_all.empty and "Semana ISO" in op_all else []
     c1, c2 = st.columns([2, 2])
     with c1:
-        f_tiendas = st.multiselect("Tiendas", tiendas, placeholder="Todas las tiendas", key="sem_tiendas")
+        f_tiendas = st.multiselect("Tiendas", project_stores, placeholder="Todas las tiendas del proyecto", key="sem_tiendas")
     with c2:
         f_sem = st.multiselect("Semana ISO", semanas, default=semanas[-1:] if semanas else [], key="sem_semanas")
 
@@ -1370,11 +1483,11 @@ def reporte_semanal():
     if f_sem and not op_s.empty and "Semana ISO" in op_s:
         op_s = op_s[op_s["Semana ISO"].isin(f_sem)]
 
-    table = operational_table(op_s, None, tiendas_base=f_tiendas or tiendas, periodo_label="Semana")
+    table = operational_table(op_s, None, tiendas_base=f_tiendas or project_stores, periodo_label="Semana")
     res = {
-        "Ingresos": table["Piezas Ingresadas"].sum() if not table.empty else 0,
-        "Acondicionado": table["Piezas Acondicionadas"].sum() if not table.empty else 0,
-        "Ubicado": table["Piezas Ubicadas"].sum() if not table.empty else 0,
+        "Ingresos": table["Total Ingresos"].sum() if not table.empty and "Total Ingresos" in table else 0,
+        "Acondicionado": table["Pzas Habilitadas"].sum() if not table.empty and "Pzas Habilitadas" in table else 0,
+        "Ubicado": table["Pzas Ubicadas"].sum() if not table.empty and "Pzas Ubicadas" in table else 0,
     }
     res["Pendiente"] = max(res["Ingresos"] - res["Ubicado"], 0)
     res["% Acondicionado"] = safe_div(res["Acondicionado"], res["Ingresos"])
@@ -1391,7 +1504,7 @@ def reporte_mensual():
     meses = sorted(op_all["Mes"].dropna().astype(str).unique().tolist()) if not op_all.empty and "Mes" in op_all else []
     c1, c2 = st.columns([2, 2])
     with c1:
-        f_tiendas = st.multiselect("Tiendas", tiendas, placeholder="Todas las tiendas", key="mes_tiendas")
+        f_tiendas = st.multiselect("Tiendas", project_stores, placeholder="Todas las tiendas del proyecto", key="mes_tiendas")
     with c2:
         f_mes = st.multiselect("Mes", meses, default=meses[-1:] if meses else [], key="mes_meses")
 
@@ -1401,11 +1514,11 @@ def reporte_mensual():
     if f_mes and not op_m.empty and "Mes" in op_m:
         op_m = op_m[op_m["Mes"].isin(f_mes)]
 
-    table = operational_table(op_m, None, tiendas_base=f_tiendas or tiendas, periodo_label="Mes")
+    table = operational_table(op_m, None, tiendas_base=f_tiendas or project_stores, periodo_label="Mes")
     res = {
-        "Ingresos": table["Piezas Ingresadas"].sum() if not table.empty else 0,
-        "Acondicionado": table["Piezas Acondicionadas"].sum() if not table.empty else 0,
-        "Ubicado": table["Piezas Ubicadas"].sum() if not table.empty else 0,
+        "Ingresos": table["Total Ingresos"].sum() if not table.empty and "Total Ingresos" in table else 0,
+        "Acondicionado": table["Pzas Habilitadas"].sum() if not table.empty and "Pzas Habilitadas" in table else 0,
+        "Ubicado": table["Pzas Ubicadas"].sum() if not table.empty and "Pzas Ubicadas" in table else 0,
     }
     res["Pendiente"] = max(res["Ingresos"] - res["Ubicado"], 0)
     res["% Acondicionado"] = safe_div(res["Acondicionado"], res["Ingresos"])
@@ -1493,7 +1606,7 @@ def productividad_page():
     with c4:
         idx_fin = st.date_input("Fin índice", value=fecha_fin, key="idx_fin")
     with c5:
-        idx_tiendas = st.multiselect("Tienda índice", tiendas, placeholder="Todas las tiendas", key="idx_tiendas")
+        idx_tiendas = st.multiselect("Tienda índice", project_stores, placeholder="Todas las tiendas del proyecto", key="idx_tiendas")
 
     idx = op_all.copy()
     if not idx.empty and "Fecha" in idx:
@@ -1564,10 +1677,12 @@ def criterios_page():
 
 
 def configuracion_page():
-    section("Configuración", "Metas, tiendas y parámetros.")
+    section("Configuración", "Metas, tiendas del proyecto y orden de pestañas.")
     if not is_admin:
         st.warning("Sólo administrador puede modificar configuración.")
         return
+
+    st.markdown("### Metas")
     with st.form("goals_form"):
         c1, c2, c3 = st.columns(3)
         with c1:
@@ -1579,8 +1694,30 @@ def configuracion_page():
         if st.form_submit_button("Guardar metas"):
             save_goals({"productividad_diaria": prod_goal, "recorridos_semanal": rec_goal, "conversion_meta": conv_goal})
             st.success("Metas guardadas.")
-    st.multiselect("Tiendas del proyecto", tiendas, default=tiendas)
 
+    st.markdown("### Tiendas del proyecto")
+    selected_project = st.multiselect(
+        "Selecciona las tiendas que alimentan las pestañas operativas",
+        sorted(set(PROJECT_TIENDAS + tiendas)),
+        default=project_stores,
+        key="project_stores_cfg",
+    )
+    if st.button("Guardar tiendas del proyecto", type="primary"):
+        save_project_stores(selected_project)
+        st.success("Tiendas del proyecto guardadas.")
+        st.rerun()
+
+    st.markdown("### Orden de pestañas")
+    current_order = get_tab_order()
+    st.caption("Como administrador puedes mover las pestañas cambiando el orden en la tabla. Edita la columna Orden y guarda.")
+    order_df = pd.DataFrame({"Pestaña": current_order, "Orden": list(range(1, len(current_order) + 1))})
+    edited_order = st.data_editor(order_df, hide_index=True, width="stretch", height=430, num_rows="fixed")
+    if st.button("Guardar orden de pestañas"):
+        edited_order["Orden"] = pd.to_numeric(edited_order["Orden"], errors="coerce").fillna(999)
+        new_order = edited_order.sort_values("Orden")["Pestaña"].tolist()
+        save_tab_order(new_order)
+        st.success("Orden guardado.")
+        st.rerun()
 
 def usuarios_page():
     section("Usuarios", "Asignación de accesos: sólo los usuarios creados pueden entrar al reporte.")
