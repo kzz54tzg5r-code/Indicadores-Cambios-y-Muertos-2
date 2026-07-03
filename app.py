@@ -1,16 +1,17 @@
 
 from __future__ import annotations
+from pathlib import Path
 import pandas as pd
 import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
 
 from core.styles import apply_styles, PRICE_BLUE, PRICE_PINK, PRICE_GREEN, PRICE_ORANGE, PRICE_PURPLE, PRICE_CYAN
-from core.auth import render_access
+from core.auth import render_access, render_login_screen
 from core.storage import (
     save_uploaded_file, active_file_exists, get_active_file_path,
     delete_active_file, get_metadata, load_users, save_users,
-    load_goals, save_goals
+    load_goals, save_goals, init_db, upsert_user, delete_user
 )
 from core.data import (
     load_normalized, filter_period, resumen_ejecutivo, resumen_tienda,
@@ -24,12 +25,12 @@ from core.utils import fmt_num, fmt_pct, fmt_money
 
 st.set_page_config(page_title="Indicadores Cambios y Muertos", page_icon="📊", layout="wide", initial_sidebar_state="expanded")
 apply_styles()
+init_db()
 
 user = render_access()
 
 if not user.get("authenticated"):
-    st.warning("Debes ingresar con un usuario autorizado para ver la información.")
-    st.info("Usuario inicial: admin / Contraseña inicial: admin123")
+    render_login_screen()
     st.stop()
 
 st.sidebar.divider()
@@ -46,11 +47,13 @@ if user["is_admin"]:
     up = st.sidebar.file_uploader("Cargar/Reemplazar Excel", type=["xlsx"])
     if up is not None and st.sidebar.button("Procesar archivo", type="primary"):
         save_uploaded_file(up)
+        st.cache_data.clear()
         st.sidebar.success("Archivo guardado")
         st.rerun()
 
     if active_file_exists() and st.sidebar.button("Borrar archivo persistido"):
         delete_active_file()
+        st.cache_data.clear()
         st.sidebar.success("Archivo eliminado")
         st.rerun()
 
@@ -72,11 +75,16 @@ if not active_file_exists():
     st.stop()
 
 @st.cache_data(show_spinner=False)
-def cached_load(path_str):
-    return load_normalized(get_active_file_path())
+def cached_load(file_path: str, mtime: float):
+    return load_normalized(Path(file_path))
 
-with st.spinner("Normalizando archivo..."):
-    op_all, co_all, diag_df, sheets = load_normalized(get_active_file_path())
+active_path = get_active_file_path()
+if active_path is None:
+    st.warning("No se encontró archivo activo.")
+    st.stop()
+
+# Se normaliza una sola vez por versión del archivo. Al cambiar de pestaña, Streamlit usa caché.
+op_all, co_all, diag_df, sheets = cached_load(str(active_path), active_path.stat().st_mtime)
 
 tiendas = sorted(set(
     (op_all["Tienda"].dropna().astype(str).tolist() if not op_all.empty and "Tienda" in op_all else [])
@@ -335,23 +343,13 @@ def usuarios_page():
             elif any(str(u.get("nomina", "")).strip() == str(nomina).strip() for u in users):
                 st.error("Ese usuario/nómina ya existe.")
             else:
-                users.append({
-                    "nomina": str(nomina).strip(),
-                    "nombre": str(nombre).strip(),
-                    "permiso": permiso,
-                    "password": str(password),
-                    "activo": bool(activo),
-                })
-                save_users(users)
-                st.success("Usuario creado. Ya podrá ingresar con su nómina/usuario y contraseña.")
+                upsert_user(str(nomina).strip(), str(nombre).strip() or str(nomina).strip(), permiso, str(password), bool(activo))
+                st.success("Usuario creado. Ya podrá ingresar con su usuario y contraseña.")
                 st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("### Usuarios existentes")
-    if not users:
-        st.info("No hay usuarios.")
-        return
-
+    users = load_users()
     users_df = pd.DataFrame([
         {
             "nomina": u.get("nomina", ""),
@@ -377,21 +375,18 @@ def usuarios_page():
     c1, c2 = st.columns([1, 1])
     with c1:
         if st.button("Guardar cambios", type="primary"):
-            old = {str(u.get("nomina", "")): u for u in users}
-            new_users = []
             for _, r in edited.iterrows():
                 nom = str(r.get("nomina", "")).strip()
                 if not nom:
                     continue
-                prev = old.get(nom, {})
-                new_users.append({
-                    "nomina": nom,
-                    "nombre": str(r.get("nombre", "")).strip(),
-                    "permiso": str(r.get("permiso", "Consulta")),
-                    "password": prev.get("password", ""),
-                    "activo": bool(r.get("activo", True)),
-                })
-            save_users(new_users)
+                existing = next((u for u in users if u.get("nomina") == nom), {})
+                upsert_user(
+                    nom,
+                    str(r.get("nombre", "")).strip() or nom,
+                    str(r.get("permiso", "Consulta")),
+                    existing.get("password", None),
+                    bool(r.get("activo", True)),
+                )
             st.success("Cambios guardados.")
             st.rerun()
 
@@ -403,8 +398,7 @@ def usuarios_page():
             elif eliminar == user.get("nomina"):
                 st.error("No puedes eliminar el usuario con el que estás conectado.")
             else:
-                users = [u for u in users if u.get("nomina", "") != eliminar]
-                save_users(users)
+                delete_user(eliminar)
                 st.success("Usuario eliminado.")
                 st.rerun()
 
@@ -419,12 +413,17 @@ def usuarios_page():
             if not new_pass:
                 st.error("Captura una contraseña.")
             else:
-                for u in users:
-                    if u.get("nomina", "") == usr:
-                        u["password"] = new_pass
-                save_users(users)
-                st.success("Contraseña actualizada.")
-                st.rerun()
+                existing = next((u for u in users if u.get("nomina") == usr), None)
+                if existing:
+                    upsert_user(
+                        existing.get("nomina"),
+                        existing.get("nombre"),
+                        existing.get("permiso"),
+                        new_pass,
+                        existing.get("activo", True),
+                    )
+                    st.success("Contraseña actualizada.")
+                    st.rerun()
 
 
 ROUTES = {
