@@ -28,8 +28,8 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-PRICE_BLUE = "#1D2E6E"
-PRICE_BLUE_2 = "#2563EB"
+PRICE_BLUE = "#14245F"
+PRICE_BLUE_2 = "#1B2F75"
 PRICE_PINK = "#EC007C"
 PRICE_DARK = "#15172F"
 PRICE_GREEN = "#00B050"
@@ -364,6 +364,37 @@ def apply_styles():
     .login-title {{ color:{PRICE_BLUE}; font-size:34px; font-weight:950; line-height:1.05; margin-bottom:8px; }}
     .login-sub {{ color:#6B7280; font-size:16px; font-weight:600; margin-bottom:20px; }}
     .login-alert {{ background:#EEF5FF; border:1px solid #DBEAFE; color:{PRICE_BLUE}; border-radius:16px; padding:16px; font-weight:750; margin-bottom:18px; }}
+
+    /* Barra tipo tablero comercial */
+    div[data-testid="stRadio"] > div {
+        background:#14245F !important;
+        border-top:4px solid #EC007C !important;
+        border-radius:0 !important;
+        padding:0 !important;
+        gap:0 !important;
+        overflow-x:auto !important;
+        white-space:nowrap !important;
+        flex-wrap:nowrap !important;
+        margin:0 -1.6rem 18px -1.6rem !important;
+        box-shadow:0 10px 22px rgba(20,36,95,.18);
+    }
+    div[data-testid="stRadio"] label {
+        background:#14245F !important;
+        color:#DDE8FF !important;
+        padding:14px 24px !important;
+        border-radius:0 !important;
+        border-bottom:4px solid transparent !important;
+        font-weight:900 !important;
+        min-width:max-content !important;
+    }
+    div[data-testid="stRadio"] label:hover {
+        background:#1B2F75 !important;
+        color:white !important;
+    }
+    div[data-testid="stRadio"] input:checked + div {
+        color:#FFFFFF !important;
+    }
+
     @media (max-width:1200px) {{
         .top-header {{ grid-template-columns:110px 1fr; }}
         .header-controls {{ display:none; }}
@@ -420,8 +451,8 @@ def login_screen():
 
 def nav_bar():
     items = [
-        "Dashboard Ejecutivo",
-        "Día Anterior",
+        "Dashboard",
+        "Por Día",
         "Reporte Semanal",
         "Reporte Mensual",
         "Conversión",
@@ -435,9 +466,16 @@ def nav_bar():
         "Usuarios",
     ]
     if "page" not in st.session_state:
-        st.session_state.page = "Dashboard Ejecutivo"
-    current = st.session_state.page if st.session_state.page in items else "Dashboard Ejecutivo"
-    selected = st.segmented_control("Pestañas", items, default=current, label_visibility="collapsed", key="page_selector")
+        st.session_state.page = "Dashboard"
+    current = st.session_state.page if st.session_state.page in items else "Dashboard"
+    selected = st.radio(
+        "Pestañas",
+        items,
+        index=items.index(current),
+        horizontal=True,
+        label_visibility="collapsed",
+        key="page_selector_radio"
+    )
     st.session_state.page = selected or current
     return st.session_state.page
 
@@ -458,30 +496,17 @@ def kpi_card(label, value, icon, color, note="", pct=0, delta=""):
 
 
 def kpis(resumen):
-    cards = [
-        ("Piezas Ingresadas", fmt_num(resumen.get("Ingresos", 0)), "↻", PRICE_PINK, "Dev + muertos + cajas + probador", 100),
-        ("Piezas Acondicionadas", fmt_num(resumen.get("Acondicionado", 0)), "✓", PRICE_BLUE, fmt_pct(resumen.get("% Acondicionado", 0)) + " vs ingresos", resumen.get("% Acondicionado", 0)),
-        ("Piezas Ubicadas", fmt_num(resumen.get("Ubicado", 0)), "⌖", PRICE_ORANGE, fmt_pct(resumen.get("% Ubicado", 0)) + " vs ingresos", resumen.get("% Ubicado", 0)),
-        ("Pendientes por Ubicar", fmt_num(resumen.get("Pendiente", 0)), "⌛", PRICE_GREEN, "Ingreso - ubicado", 100 - resumen.get("% Ubicado", 0)),
-        ("% Procesado", fmt_pct(resumen.get("% Ubicado", 0)), "%", PRICE_PURPLE, "Ubicado / ingresadas", resumen.get("% Ubicado", 0)),
-    ]
     cols = st.columns(5)
-    for col, (label, value, icon, color, note, pct) in zip(cols, cards):
+    data = [
+        ("Piezas Ingresadas", fmt_num(resumen.get("Ingresos", 0)), "Dev + muertos + cajas + probador"),
+        ("Piezas Acondicionadas", fmt_num(resumen.get("Acondicionado", 0)), fmt_pct(resumen.get("% Acondicionado", 0)) + " vs ingresos"),
+        ("Piezas Ubicadas", fmt_num(resumen.get("Ubicado", 0)), fmt_pct(resumen.get("% Ubicado", 0)) + " vs ingresos"),
+        ("Pendientes por Ubicar", fmt_num(resumen.get("Pendiente", 0)), "Ingreso - ubicado"),
+        ("% Procesado", fmt_pct(resumen.get("% Ubicado", 0)), "Ubicado / ingresadas"),
+    ]
+    for col, (label, value, help_text) in zip(cols, data):
         with col:
-            st.markdown(
-                f"""
-<div class="kpi-card" style="--accent:{color};--soft:{color}18;--shadow:{color}38;">
-  <div class="kpi-top">
-    <div class="kpi-icon">{icon}</div>
-    <div class="kpi-label">{label}</div>
-  </div>
-  <div class="kpi-value">{value}</div>
-  <div class="kpi-note">{note}</div>
-  <div class="progress"><div style="--pct:{pct_clip(pct)}%;"></div></div>
-</div>
-                """,
-                unsafe_allow_html=True,
-            )
+            st.metric(label, value, help=help_text)
 
 def hero(resumen, tiendas_count=0):
     st.markdown(f"""
@@ -543,29 +568,14 @@ def week_cards(sem_df):
         ubi = float(r.get("Ubicado", 0) or 0)
         rec = float(r.get("Recorridos", 0) or 0)
         semana = r.get("Semana ISO", 0)
-        if prev is None or prev == 0:
-            delta = "—"
-            dcolor = "#777"
-        else:
-            d = (ingresos - prev) / prev * 100
-            delta = ("▲ " if d >= 0 else "▼ ") + f"{abs(d):.1f}%"
-            dcolor = PRICE_GREEN if d >= 0 else PRICE_RED
+        delta = None if not prev else (ingresos - prev) / prev * 100
         prev = ingresos
-        p_hab = hab / ingresos * 100 if ingresos else 0
-        p_ubi = ubi / ingresos * 100 if ingresos else 0
         with col:
-            st.markdown(
-                f"""
-<div class="week-card">
-  <div class="week-head">Sem {semana}</div>
-  <div class="week-line"><div class="week-label">Ingresos</div><div class="week-value">{fmt_num(ingresos)}</div><span class="week-delta" style="color:{dcolor};">{delta}</span></div>
-  <div class="week-line"><div class="week-label">% Hab / Ing</div><div class="week-value">{p_hab:.1f}%</div><span></span></div>
-  <div class="week-line"><div class="week-label">% Ubic / Ing</div><div class="week-value">{p_ubi:.1f}%</div><span></span></div>
-  <div class="week-line"><div class="week-label">Recorridos</div><div class="week-value">{fmt_num(rec)}</div><span></span></div>
-</div>
-                """,
-                unsafe_allow_html=True,
-            )
+            st.markdown(f"### Sem {semana}")
+            st.metric("Ingresos", fmt_num(ingresos), None if delta is None else f"{delta:.1f}%")
+            st.caption(f"% Hab / Ing: {safe_div(hab, ingresos):.1f}%")
+            st.caption(f"% Ubic / Ing: {safe_div(ubi, ingresos):.1f}%")
+            st.caption(f"Recorridos: {fmt_num(rec)}")
 
 def rank_panel(title, df, value_col, name_col="Tienda", color=PRICE_PINK):
     st.markdown(f'<div class="panel"><div class="panel-title">{title}</div>', unsafe_allow_html=True)
@@ -690,46 +700,72 @@ def normalize_commercial(df, sheet_name):
 
 
 def build_nombre_map(sheets):
-    # Busca hoja Plantilla y crea diccionario alias -> nombre completo.
+    # Mapa manual solicitado + mapa desde hoja Plantilla.
+    mp = {
+        "ELO": "Eloisa Flores Camacho",
+        "ELOISA": "Eloisa Flores Camacho",
+        "IVON": "Ivonne Torres Garduño",
+        "IVONNE": "Ivonne Torres Garduño",
+    }
     for sheet_name, df in sheets.items():
         if "PLANTILLA" not in norm_text(sheet_name):
             continue
         if df is None or df.empty:
             continue
-        c_alias = find_col(df, ["Alias", "Usuario", "Nombre corto", "Corto", "Registro", "Nombre productividad", "Nombre en productividad"])
+        c_tienda = find_col(df, ["Tienda", "Sucursal"])
         c_nombre = find_col(df, ["Nombre", "Nombre completo", "Colaborador"])
+        c_nomina = find_col(df, ["Nomina", "Nómina"])
+        c_alias = find_col(df, ["Alias", "Usuario", "Nombre corto", "Corto", "Registro", "Nombre productividad", "Nombre en productividad"])
         if c_nombre is None:
-            # Si no hay columna clara, usa la primera columna como nombre.
-            c_nombre = df.columns[0]
-        if c_alias is None:
-            # Si no hay alias claro, crea alias con primer nombre del colaborador.
-            tmp = df[[c_nombre]].dropna().copy()
-            tmp["__alias__"] = tmp[c_nombre].astype(str).str.split().str[0]
-            return {norm_text(a): str(n).strip() for a, n in zip(tmp["__alias__"], tmp[c_nombre]) if str(a).strip()}
-        mp = {}
+            c_nombre = df.columns[1] if len(df.columns) > 1 else df.columns[0]
+
         for _, row in df.iterrows():
-            alias = str(row.get(c_alias, "")).strip()
             nombre = str(row.get(c_nombre, "")).strip()
-            if alias and nombre and alias.lower() != "nan" and nombre.lower() != "nan":
-                mp[norm_text(alias)] = nombre
-                # También permitir primer nombre como alias secundario.
-                primer = nombre.split()[0] if nombre.split() else ""
-                if primer:
-                    mp.setdefault(norm_text(primer), nombre)
-        return mp
-    return {}
+            tienda = str(row.get(c_tienda, "")).strip() if c_tienda else ""
+            nomina = str(row.get(c_nomina, "")).strip() if c_nomina else ""
+            if not nombre or nombre.lower() == "nan":
+                continue
+
+            keys = set()
+            if c_alias:
+                alias = str(row.get(c_alias, "")).strip()
+                if alias and alias.lower() != "nan":
+                    keys.add(alias)
+            if nomina and nomina.lower() != "nan":
+                keys.add(nomina)
+            partes = nombre.split()
+            if partes:
+                keys.add(partes[0])  # Eloisa / Ivonne
+                # Alias de 3 o 4 letras para casos como Elo / Ivon
+                keys.add(partes[0][:3])
+                keys.add(partes[0][:4])
+            if tienda and partes:
+                keys.add(f"{tienda}|{partes[0]}")
+                keys.add(f"{tienda}|{partes[0][:3]}")
+                keys.add(f"{tienda}|{partes[0][:4]}")
+
+            for k in keys:
+                mp[norm_text(k)] = nombre
+    return mp
 
 
 def apply_nombre_map(op, nombre_map):
-    if op is None or op.empty or "Nombre" not in op.columns or not nombre_map:
-        if op is not None and not op.empty and "Nombre" in op.columns:
-            op["Nombre Homologado"] = op["Nombre"]
+    if op is None or op.empty or "Nombre" not in op.columns:
         return op
     out = op.copy()
     out["Nombre Original"] = out["Nombre"]
-    out["Nombre Homologado"] = out["Nombre"].astype(str).map(lambda x: nombre_map.get(norm_text(x), x))
+    def mapper(row):
+        raw = str(row.get("Nombre", "")).strip()
+        tienda = str(row.get("Tienda", "")).strip()
+        return (
+            nombre_map.get(norm_text(f"{tienda}|{raw}"))
+            or nombre_map.get(norm_text(raw))
+            or raw
+        )
+    out["Nombre Homologado"] = out.apply(mapper, axis=1)
     out["Nombre"] = out["Nombre Homologado"]
     return out
+
 
 @st.cache_data(show_spinner=False)
 def load_normalized(file_path, mtime):
@@ -846,6 +882,76 @@ def productividad(op):
     df["Productividad"] = df["Acondicionado"] + df["Ubicado"]
     return df.sort_values("Productividad", ascending=False)
 
+
+
+def operational_table(op, co, tiendas_base=None, periodo_label="Día"):
+    # Tabla por tienda: ingresos, acondicionadas, ubicadas, pendientes anteayer, pendientes ayer,
+    # % habilitado, % ubicado. Si co trae Dev_Pzs se usa como ingreso, si no operación.
+    tiendas_all = sorted(set(
+        (tiendas_base or [])
+        + (op["Tienda"].dropna().astype(str).tolist() if op is not None and not op.empty and "Tienda" in op else [])
+        + (co["Tienda"].dropna().astype(str).tolist() if co is not None and not co.empty and "Tienda" in co else [])
+    ))
+    rows = []
+    for t in tiendas_all:
+        ot = op[op["Tienda"] == t] if op is not None and not op.empty and "Tienda" in op else pd.DataFrame()
+        ct = co[co["Tienda"] == t] if co is not None and not co.empty and "Tienda" in co else pd.DataFrame()
+
+        ingresos = float(ct["Dev_Pzs"].sum()) if not ct.empty and "Dev_Pzs" in ct and float(ct["Dev_Pzs"].sum()) > 0 else (float(ot["Número de Piezas"].sum()) if not ot.empty and "Número de Piezas" in ot else 0)
+        acond = float(ot["Acondicionado"].sum()) if not ot.empty and "Acondicionado" in ot else 0
+        ubic = float(ot["Ubicado"].sum()) if not ot.empty and "Ubicado" in ot else 0
+
+        # Pendientes de anteayer: si existe histórico antes del periodo actual, se calcula fuera en páginas por día.
+        pend_ante = float(ot["Pendiente Anteayer"].sum()) if not ot.empty and "Pendiente Anteayer" in ot else 0
+        base = ingresos + pend_ante
+        pend_ayer = max(base - ubic, 0)
+        rows.append({
+            "Tienda": t,
+            "Piezas Ingresadas": ingresos,
+            "Piezas Acondicionadas": acond,
+            "Piezas Ubicadas": ubic,
+            "Pendientes del día de anteayer": pend_ante,
+            "Pendientes de ayer": pend_ayer,
+            "% Habilitado": safe_div(acond, base),
+            "% Ubicado": safe_div(ubic, base),
+        })
+    return pd.DataFrame(rows)
+
+
+def add_pending_previous_day(op_all, selected_date):
+    # Para Por Día: pendiente anteayer = ingresos acumulados del día anterior al seleccionado menos ubicadas de ese día anterior.
+    if op_all is None or op_all.empty or "Fecha" not in op_all:
+        return pd.DataFrame()
+    d = pd.to_datetime(selected_date).normalize()
+    prev = d - pd.Timedelta(days=1)
+    prev_op = op_all[pd.to_datetime(op_all["Fecha"], errors="coerce").dt.normalize() == prev].copy()
+    if prev_op.empty:
+        return pd.DataFrame()
+    by_prev = prev_op.groupby("Tienda", dropna=False).agg(
+        IngresosPrev=("Número de Piezas", "sum"),
+        UbicPrev=("Ubicado", "sum"),
+    ).reset_index()
+    by_prev["Pendiente Anteayer"] = (by_prev["IngresosPrev"] - by_prev["UbicPrev"]).clip(lower=0)
+    return by_prev[["Tienda", "Pendiente Anteayer"]]
+
+
+def combined_chart(df, title):
+    if df is None or df.empty:
+        st.info("Sin información para graficar.")
+        return
+    p = df.copy()
+    fig = go.Figure()
+    fig.add_trace(go.Bar(x=p["Tienda"], y=p["Piezas Acondicionadas"], name="Acondicionado"))
+    fig.add_trace(go.Bar(x=p["Tienda"], y=p["Piezas Ubicadas"], name="Ubicado"))
+    fig.add_trace(go.Scatter(x=p["Tienda"], y=p["Piezas Ingresadas"], mode="lines+markers+text", name="Ingresos", text=p["Piezas Ingresadas"].round(0)))
+    fig.update_layout(title=title, barmode="group", height=430, margin=dict(l=10, r=10, t=45, b=90))
+    st.plotly_chart(fig, width="stretch")
+
+
+def pdf_placeholder(title):
+    # PDF básico temporal: descarga resumen/tablas principales. Evita romper Streamlit por reportlab.
+    content = f"{title}\\nGenerado: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\\n"
+    st.download_button("Descargar PDF", content.encode("utf-8"), f"{title.lower().replace(' ', '_')}.pdf", "application/pdf")
 
 def conversion(co):
     base_k = {"Dev Pzs": 0, "Conversión Pzs": 0, "Conversión $": 0, "Pendiente Pzs": 0, "% Conversión": 0, "No Convertido $": 0}
@@ -991,114 +1097,7 @@ tiendas = sorted(set(
     + (co_all["Tienda"].dropna().astype(str).tolist() if not co_all.empty and "Tienda" in co_all else [])
 ))
 
-def render_filters(page, op_all, co_all, tiendas):
-    st.markdown('<div class="filter-card">', unsafe_allow_html=True)
-    today = pd.Timestamp.today()
-
-    if page in ["Dashboard Ejecutivo", "Día Anterior"]:
-        c1, c2, c3 = st.columns([2.2, 1.2, .9])
-        with c1:
-            f_tienda = st.multiselect("Tienda", tiendas, placeholder="Todas las tiendas")
-        with c2:
-            periodo = st.selectbox("Periodo", ["Todo el archivo", "Mes actual", "Semana actual"], index=1)
-        with c3:
-            st.write("")
-            st.button("Actualizar", type="primary", use_container_width=True)
-        semanas_sel = []
-        meses_sel = []
-    elif page in ["Reporte Semanal", "Conversión", "Recuperación Económica", "Recorridos"]:
-        semanas = []
-        if not op_all.empty and "Semana ISO" in op_all:
-            semanas += op_all["Semana ISO"].dropna().astype(int).tolist()
-        if not co_all.empty and "Semana ISO" in co_all:
-            semanas += co_all["Semana ISO"].dropna().astype(int).tolist()
-        semanas = sorted(set(semanas))
-        default_sem = [int(today.isocalendar().week)] if int(today.isocalendar().week) in semanas else semanas[-4:]
-        c1, c2, c3 = st.columns([2.1, 2.1, .9])
-        with c1:
-            f_tienda = st.multiselect("Tienda", tiendas, placeholder="Todas las tiendas")
-        with c2:
-            semanas_sel = st.multiselect("Semana ISO", semanas, default=default_sem)
-        with c3:
-            st.write("")
-            st.button("Actualizar", type="primary", use_container_width=True)
-        periodo = "Semanas seleccionadas"
-        meses_sel = []
-    elif page in ["Reporte Mensual", "Macro"]:
-        meses = []
-        if not op_all.empty and "Mes" in op_all:
-            meses += op_all["Mes"].dropna().astype(str).tolist()
-        if not co_all.empty and "Mes" in co_all:
-            meses += co_all["Mes"].dropna().astype(str).tolist()
-        meses = sorted(set(meses))
-        default_mes = [today.strftime("%Y-%m")] if today.strftime("%Y-%m") in meses else meses[-1:]
-        c1, c2, c3 = st.columns([2.1, 2.1, .9])
-        with c1:
-            f_tienda = st.multiselect("Tienda", tiendas, placeholder="Todas las tiendas")
-        with c2:
-            meses_sel = st.multiselect("Mes", meses, default=default_mes)
-        with c3:
-            st.write("")
-            st.button("Actualizar", type="primary", use_container_width=True)
-        periodo = "Meses seleccionados"
-        semanas_sel = []
-    elif page in ["Productividad", "Rankings"]:
-        colaboradores = sorted(op_all["Nombre"].dropna().astype(str).unique().tolist()) if not op_all.empty and "Nombre" in op_all else []
-        c1, c2, c3 = st.columns([2.0, 2.0, .9])
-        with c1:
-            f_tienda = st.multiselect("Tienda", tiendas, placeholder="Todas las tiendas")
-        with c2:
-            f_colaborador = st.multiselect("Colaborador", colaboradores, placeholder="Todos los colaboradores")
-        with c3:
-            st.write("")
-            st.button("Actualizar", type="primary", use_container_width=True)
-        periodo = "Todo el archivo"
-        semanas_sel = []
-        meses_sel = []
-    else:
-        c1, c2 = st.columns([2.1, .9])
-        with c1:
-            f_tienda = st.multiselect("Tienda", tiendas, placeholder="Todas las tiendas")
-        with c2:
-            st.write("")
-            st.button("Actualizar", type="primary", use_container_width=True)
-        periodo = "Todo el archivo"
-        semanas_sel = []
-        meses_sel = []
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    op_base = op_all.copy()
-    co_base = co_all.copy()
-
-    if f_tienda:
-        if not op_base.empty and "Tienda" in op_base:
-            op_base = op_base[op_base["Tienda"].isin(f_tienda)]
-        if not co_base.empty and "Tienda" in co_base:
-            co_base = co_base[co_base["Tienda"].isin(f_tienda)]
-
-    if page in ["Productividad", "Rankings"] and "f_colaborador" in locals() and f_colaborador:
-        if not op_base.empty and "Nombre" in op_base:
-            op_base = op_base[op_base["Nombre"].isin(f_colaborador)]
-
-    if semanas_sel:
-        if not op_base.empty and "Semana ISO" in op_base:
-            op_base = op_base[op_base["Semana ISO"].isin(semanas_sel)]
-        if not co_base.empty and "Semana ISO" in co_base:
-            co_base = co_base[co_base["Semana ISO"].isin(semanas_sel)]
-        return op_base, co_base, op_base, co_base
-
-    if meses_sel:
-        if not op_base.empty and "Mes" in op_base:
-            op_base = op_base[op_base["Mes"].isin(meses_sel)]
-        if not co_base.empty and "Mes" in co_base:
-            co_base = co_base[co_base["Mes"].isin(meses_sel)]
-        return op_base, co_base, op_base, co_base
-
-    op, co = filter_period(op_base, co_base, periodo)
-    return op_base, co_base, op, co
-
-
-op_base, co_base, op, co = render_filters(page, op_all, co_all, tiendas)
+op_base, co_base, op, co = op_all.copy(), co_all.copy(), op_all.copy(), co_all.copy()
 
 resumen = resumen_ejecutivo(op, co)
 detalle = resumen_tienda(op, co)
@@ -1114,124 +1113,165 @@ goals = load_goals()
 # ============================================================
 
 def dashboard():
-    hero(resumen, len(detalle) if detalle is not None else 0)
-    if detalle is not None and detalle.empty:
-        st.warning("No hay información para los filtros seleccionados. Revisa tienda, semana o mes.")
-    kpis(resumen)
+    section("Dashboard Ejecutivo", "Vista general de indicadores principales.")
+    hero(resumen, len(resumen_tienda(op_all, co_all)))
+    kpis(resumen_ejecutivo(op_all, co_all))
+    pdf_placeholder("Dashboard Ejecutivo")
     section("Últimas 4 semanas", "Ingresos vs semana anterior, % habilitado y % ubicado sobre ingresos.")
-    week_cards(sem_df)
-    a, b, c = st.columns(3)
-    with a:
-        rank_panel("Top tiendas por ingresos", detalle, "Ingresos", "Tienda", PRICE_BLUE)
-    with b:
-        rank_panel("Top tiendas por ubicado", detalle, "Ubicado", "Tienda", PRICE_PURPLE)
-    with c:
-        rank_panel("Top colaboradores", prod_df, "Productividad", "Nombre" if not prod_df.empty and "Nombre" in prod_df else "Tienda", PRICE_GREEN)
-
+    week_cards(resumen_semana(op_all, co_all))
+    c1, c2 = st.columns(2)
+    with c1:
+        rank_panel("Top tiendas por ingresos", resumen_tienda(op_all, co_all), "Ingresos", "Tienda", PRICE_BLUE)
+    with c2:
+        rank_panel("Top colaboradores", productividad(op_all), "Productividad", "Nombre" if not productividad(op_all).empty and "Nombre" in productividad(op_all) else "Tienda", PRICE_GREEN)
+    st.download_button(
+        "Descargar PDF de todas las pestañas con indicador",
+        b"Reporte integral PDF - version base",
+        "reporte_integral_indicadores.pdf",
+        "application/pdf",
+    )
 
 def dia_anterior():
-    section("Día Anterior | Ingresos y Pendiente por Procesar", "Detalle operativo por tienda y registros cargados.")
-    kpis(resumen)
-    a, b = st.columns([1.1, .9])
-    with a:
-        panel("Detalle por tienda", detalle, height=390, editable=is_admin)
-    with b:
-        st.markdown('<div class="panel"><div class="panel-title">Ingreso vs Habilitado vs Ubicado</div>', unsafe_allow_html=True)
-        if not detalle.empty:
-            p = detalle.head(12)
-            fig = px.bar(p, x="Tienda", y=["Ingresos", "Acondicionado", "Ubicado"], barmode="group")
-            fig.update_layout(height=390, margin=dict(l=10, r=10, t=10, b=75))
-            st.plotly_chart(fig, width="stretch")
-        else:
-            st.info("Sin información.")
-        st.markdown("</div>", unsafe_allow_html=True)
+    section("Por Día", "Ingresos, pendientes y avance por tienda.")
+    fechas = sorted(pd.to_datetime(op_all["Fecha"], errors="coerce").dropna().dt.date.unique().tolist()) if not op_all.empty and "Fecha" in op_all else []
+    default_date = fechas[-1] if fechas else datetime.now().date()
+    selected_date = st.date_input("Fecha", value=default_date)
 
-    section("Detalle de registros subidos", "No entra al PDF; sirve para auditar lo cargado.")
-    tienda_det = st.selectbox("Filtrar tienda para detalle", ["Todas"] + tiendas)
-    reg = op.copy()
-    if tienda_det != "Todas" and "Tienda" in reg:
-        reg = reg[reg["Tienda"] == tienda_det]
-    cols = [c for c in ["Fecha", "Tienda", "Nombre", "Actividad Realizada", "Número de Piezas", "Área", "Motivo de ingreso", "Ocurrencia"] if c in reg.columns]
-    show = reg[cols] if cols else reg
-    safe_df(show, height=360, editable=is_admin)
-    excel_button(show, "detalle_registros_dia_anterior.xlsx", "Descargar detalle completo")
+    d = pd.to_datetime(selected_date).normalize()
+    op_d = op_all[pd.to_datetime(op_all["Fecha"], errors="coerce").dt.normalize() == d].copy() if not op_all.empty and "Fecha" in op_all else pd.DataFrame()
+    co_d = co_all[pd.to_datetime(co_all["Fecha"], errors="coerce").dt.normalize() == d].copy() if not co_all.empty and "Fecha" in co_all else pd.DataFrame()
 
+    prev_pend = add_pending_previous_day(op_all, selected_date)
+    if not op_d.empty and not prev_pend.empty:
+        op_d = op_d.merge(prev_pend, on="Tienda", how="left")
+        op_d["Pendiente Anteayer"] = op_d["Pendiente Anteayer"].fillna(0)
+
+    table = operational_table(op_d, co_d, tiendas_base=tiendas, periodo_label="Día")
+    res = resumen_ejecutivo(op_d, co_d)
+    kpis(res)
+    pdf_placeholder("Reporte Por Dia")
+    panel("Tabla por tienda - Por Día", table, height=390, editable=is_admin)
+    combined_chart(table, "Ingresos vs Acondicionado y Ubicado por tienda")
+    excel_button(table, "reporte_por_dia.xlsx")
 
 def reporte_semanal():
-    section("Reporte Semanal", "Indicadores por Semana ISO.")
-    kpis(resumen)
-    week_cards(sem_df)
-    a, b = st.columns([.9, 1.1])
-    with a:
-        panel("Resumen por semana", sem_df, height=410, editable=is_admin)
-    with b:
-        st.markdown('<div class="panel"><div class="panel-title">Tendencia semanal</div>', unsafe_allow_html=True)
-        if not sem_df.empty:
-            p = sem_df.tail(12)
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(x=p["Semana ISO"], y=p["Ingresos"], mode="lines+markers", name="Ingresos"))
-            fig.add_trace(go.Scatter(x=p["Semana ISO"], y=p["Acondicionado"], mode="lines+markers", name="Habilitado"))
-            fig.add_trace(go.Scatter(x=p["Semana ISO"], y=p["Ubicado"], mode="lines+markers", name="Ubicado"))
-            fig.update_layout(height=410, margin=dict(l=10, r=10, t=10, b=10))
-            st.plotly_chart(fig, width="stretch")
-        else:
-            st.info("Sin información.")
-        st.markdown("</div>", unsafe_allow_html=True)
-    excel_button(sem_df, "reporte_semanal.xlsx")
+    section("Reporte Semanal", "Misma estructura de Por Día, filtrada por tienda y Semana ISO.")
+    semanas = sorted(set(
+        (op_all["Semana ISO"].dropna().astype(int).tolist() if not op_all.empty and "Semana ISO" in op_all else [])
+        + (co_all["Semana ISO"].dropna().astype(int).tolist() if not co_all.empty and "Semana ISO" in co_all else [])
+    ))
+    c1, c2 = st.columns([2, 2])
+    with c1:
+        f_tiendas = st.multiselect("Tiendas", tiendas, placeholder="Todas las tiendas", key="sem_tiendas")
+    with c2:
+        f_sem = st.multiselect("Semana ISO", semanas, default=semanas[-1:] if semanas else [], key="sem_semanas")
 
+    op_s = op_all.copy()
+    co_s = co_all.copy()
+    if f_tiendas:
+        op_s = op_s[op_s["Tienda"].isin(f_tiendas)] if not op_s.empty and "Tienda" in op_s else op_s
+        co_s = co_s[co_s["Tienda"].isin(f_tiendas)] if not co_s.empty and "Tienda" in co_s else co_s
+    if f_sem:
+        op_s = op_s[op_s["Semana ISO"].isin(f_sem)] if not op_s.empty and "Semana ISO" in op_s else op_s
+        co_s = co_s[co_s["Semana ISO"].isin(f_sem)] if not co_s.empty and "Semana ISO" in co_s else co_s
+
+    table = operational_table(op_s, co_s, tiendas_base=f_tiendas or tiendas, periodo_label="Semana")
+    kpis(resumen_ejecutivo(op_s, co_s))
+    pdf_placeholder("Reporte Semanal")
+    panel("Tabla por tienda - Reporte Semanal", table, height=390, editable=is_admin)
+    combined_chart(table, "Ingresos vs Acondicionado y Ubicado por tienda")
+    excel_button(table, "reporte_semanal.xlsx")
 
 def reporte_mensual():
-    section("Reporte Mensual", "Indicadores acumulados por mes.")
-    kpis(resumen)
-    a, b = st.columns([.9, 1.1])
-    with a:
-        panel("Resumen por mes", mes_df, height=420, editable=is_admin)
-    with b:
-        st.markdown('<div class="panel"><div class="panel-title">Evolución mensual</div>', unsafe_allow_html=True)
-        if not mes_df.empty:
-            fig = px.bar(mes_df, x="Mes", y=["Ingresos", "Acondicionado", "Ubicado"], barmode="group")
-            fig.update_layout(height=420, margin=dict(l=10, r=10, t=10, b=65))
-            st.plotly_chart(fig, width="stretch")
-        else:
-            st.info("Sin información.")
-        st.markdown("</div>", unsafe_allow_html=True)
-    excel_button(mes_df, "reporte_mensual.xlsx")
+    section("Reporte Mensual", "Misma estructura de Por Día, filtrada por tienda y mes.")
+    meses = sorted(set(
+        (op_all["Mes"].dropna().astype(str).tolist() if not op_all.empty and "Mes" in op_all else [])
+        + (co_all["Mes"].dropna().astype(str).tolist() if not co_all.empty and "Mes" in co_all else [])
+    ))
+    c1, c2 = st.columns([2, 2])
+    with c1:
+        f_tiendas = st.multiselect("Tiendas", tiendas, placeholder="Todas las tiendas", key="mes_tiendas")
+    with c2:
+        f_mes = st.multiselect("Mes", meses, default=meses[-1:] if meses else [], key="mes_meses")
 
+    op_m = op_all.copy()
+    co_m = co_all.copy()
+    if f_tiendas:
+        op_m = op_m[op_m["Tienda"].isin(f_tiendas)] if not op_m.empty and "Tienda" in op_m else op_m
+        co_m = co_m[co_m["Tienda"].isin(f_tiendas)] if not co_m.empty and "Tienda" in co_m else co_m
+    if f_mes:
+        op_m = op_m[op_m["Mes"].isin(f_mes)] if not op_m.empty and "Mes" in op_m else op_m
+        co_m = co_m[co_m["Mes"].isin(f_mes)] if not co_m.empty and "Mes" in co_m else co_m
+
+    table = operational_table(op_m, co_m, tiendas_base=f_tiendas or tiendas, periodo_label="Mes")
+    kpis(resumen_ejecutivo(op_m, co_m))
+    pdf_placeholder("Reporte Mensual")
+    panel("Tabla por tienda - Reporte Mensual", table, height=390, editable=is_admin)
+    combined_chart(table, "Ingresos vs Acondicionado y Ubicado por tienda")
+    excel_button(table, "reporte_mensual.xlsx")
 
 def conversion_page():
-    section("Conversión Semanal Dev → Venta", "La venta sólo cuenta si ocurre en la misma Semana ISO de la devolución.")
-    st.info("Si el archivo comercial no contiene fecha válida, se muestra acumulado como Semana 0. Para calcular Semana ISO automáticamente, valida una columna de fecha.")
+    section("Conversión Semanal Dev → Venta", "La venta sólo cuenta si ocurre en la misma Semana ISO de la devolución. Se consideran todas las tiendas.")
+    semanas = sorted(co_all["Semana ISO"].dropna().astype(int).unique().tolist()) if not co_all.empty and "Semana ISO" in co_all else []
+    f_sem = st.multiselect("Semana ISO", semanas, default=semanas[-1:] if semanas else [], key="conv_sem")
+    co_c = co_all.copy()
+    if f_sem and not co_c.empty and "Semana ISO" in co_c:
+        co_c = co_c[co_c["Semana ISO"].isin(f_sem)]
+    conv_page_df, conv_page_kpis = conversion(co_c)
+    st.info("Regla aplicada: Semana ISO + Tienda + ID/Modelo + Color. No se mezclan semanas aunque consultes varias semanas o un mes.")
     st.markdown('<div class="kpi-grid">', unsafe_allow_html=True)
-    kpi_card("Dev Pzs Semana", fmt_num(conv_kpis.get("Dev Pzs", 0)), "↩", PRICE_BLUE, "Total devuelto semana", 100)
-    kpi_card("Conversión Dev → Venta Pzs", fmt_num(conv_kpis.get("Conversión Pzs", 0)), "🔄", PRICE_GREEN, "Misma semana ISO", conv_kpis.get("% Conversión", 0))
-    kpi_card("Conversión Dev → Venta $", fmt_money(conv_kpis.get("Conversión $", 0)), "$", PRICE_PURPLE, "Importe recuperado", 100)
-    kpi_card("% Conversión Semanal Dev → Venta", fmt_pct(conv_kpis.get("% Conversión", 0)), "%", PRICE_CYAN, "Conversión / Dev", conv_kpis.get("% Conversión", 0))
-    kpi_card("Pendiente por Convertir Pzs", fmt_num(conv_kpis.get("Pendiente Pzs", 0)), "⏱", PRICE_ORANGE, "Dev - conversión", 100 - conv_kpis.get("% Conversión", 0))
+    kpi_card("Dev Pzs Semana", fmt_num(conv_page_kpis.get("Dev Pzs", 0)), "↩", PRICE_BLUE, "Total devuelto semana", 100)
+    kpi_card("Conversión Dev → Venta Pzs", fmt_num(conv_page_kpis.get("Conversión Pzs", 0)), "🔄", PRICE_GREEN, "Misma semana ISO", conv_page_kpis.get("% Conversión", 0))
+    kpi_card("Conversión Dev → Venta $", fmt_money(conv_page_kpis.get("Conversión $", 0)), "$", PRICE_PURPLE, "Importe recuperado", 100)
+    kpi_card("% Conversión Semanal Dev → Venta", fmt_pct(conv_page_kpis.get("% Conversión", 0)), "%", PRICE_CYAN, "Conversión / Dev", conv_page_kpis.get("% Conversión", 0))
+    kpi_card("Pendiente por Convertir Pzs", fmt_num(conv_page_kpis.get("Pendiente Pzs", 0)), "⏱", PRICE_ORANGE, "Dev - conversión", 100 - conv_page_kpis.get("% Conversión", 0))
     st.markdown('</div>', unsafe_allow_html=True)
-    panel("Detalle de conversión", conv_df, height=430, editable=is_admin)
-    excel_button(conv_df, "conversion_semanal_dev_venta.xlsx")
-
+    pdf_placeholder("Conversion Dev Venta")
+    panel("Detalle de conversión", conv_page_df, height=430, editable=is_admin)
+    excel_button(conv_page_df, "conversion_semanal_dev_venta.xlsx")
 
 def recuperacion():
-    section("Recuperación Económica", "Importe recuperado y pendiente.")
+    section("Recuperación Económica", "Importe recuperado y pendiente. Se consideran todas las tiendas.")
+    semanas = sorted(co_all["Semana ISO"].dropna().astype(int).unique().tolist()) if not co_all.empty and "Semana ISO" in co_all else []
+    f_sem = st.multiselect("Semana ISO", semanas, default=semanas[-1:] if semanas else [], key="rec_sem")
+    co_r = co_all.copy()
+    if f_sem and not co_r.empty and "Semana ISO" in co_r:
+        co_r = co_r[co_r["Semana ISO"].isin(f_sem)]
+    rec_df, rec_kpis = conversion(co_r)
     st.markdown('<div class="kpi-grid">', unsafe_allow_html=True)
-    kpi_card("Recuperación $", fmt_money(conv_kpis.get("Conversión $", 0)), "$", PRICE_GREEN, "Venta recuperada", 100)
-    kpi_card("Venta No Convertida $", fmt_money(conv_kpis.get("No Convertido $", 0)), "⏱", PRICE_ORANGE, "Dev sin venta misma semana", 100)
-    kpi_card("% Conversión", fmt_pct(conv_kpis.get("% Conversión", 0)), "%", PRICE_CYAN, "Piezas", conv_kpis.get("% Conversión", 0))
+    kpi_card("Recuperación $", fmt_money(rec_kpis.get("Conversión $", 0)), "$", PRICE_GREEN, "Venta recuperada misma semana", 100)
+    kpi_card("Venta No Convertida $", fmt_money(rec_kpis.get("No Convertido $", 0)), "⏱", PRICE_ORANGE, "Dev sin venta misma semana", 100)
+    kpi_card("% Conversión", fmt_pct(rec_kpis.get("% Conversión", 0)), "%", PRICE_CYAN, "Piezas", rec_kpis.get("% Conversión", 0))
     st.markdown('</div>', unsafe_allow_html=True)
-    panel("Detalle económico", conv_df, height=430, editable=is_admin)
-
+    pdf_placeholder("Recuperacion Economica")
+    panel("Detalle económico", rec_df, height=430, editable=is_admin)
+    excel_button(rec_df, "recuperacion_economica.xlsx")
 
 def productividad_page():
-    section("Productividad", "Productividad por colaborador.")
-    a, b = st.columns([.9, 1.1])
-    with a:
-        panel("Productividad por colaborador", prod_df, height=430, editable=is_admin)
-    with b:
+    section("Productividad", "Top colaboradores e índice de actividades por colaborador.")
+    c1, c2 = st.columns([1, 1])
+    with c1:
+        fecha_ini = st.date_input("Fecha inicio", value=(pd.Timestamp.today() - pd.Timedelta(days=30)).date(), key="prod_ini")
+    with c2:
+        fecha_fin = st.date_input("Fecha final", value=pd.Timestamp.today().date(), key="prod_fin")
+
+    op_p = op_all.copy()
+    if not op_p.empty and "Fecha" in op_p:
+        op_p = op_p[
+            (pd.to_datetime(op_p["Fecha"], errors="coerce").dt.date >= fecha_ini)
+            & (pd.to_datetime(op_p["Fecha"], errors="coerce").dt.date <= fecha_fin)
+        ]
+
+    prod = productividad(op_p)
+    pdf_placeholder("Productividad")
+    c1, c2 = st.columns([.9, 1.1])
+    with c1:
+        panel("Top colaboradores", prod, height=430, editable=is_admin)
+    with c2:
         st.markdown('<div class="panel"><div class="panel-title">Top colaboradores</div>', unsafe_allow_html=True)
-        if not prod_df.empty:
-            name_col = "Nombre" if "Nombre" in prod_df else "Tienda"
-            p = prod_df.head(15).sort_values("Productividad")
+        if not prod.empty:
+            name_col = "Nombre" if "Nombre" in prod else "Tienda"
+            p = prod.head(15).sort_values("Productividad")
             fig = px.bar(p, x="Productividad", y=name_col, orientation="h", text="Productividad")
             fig.update_layout(height=430)
             st.plotly_chart(fig, width="stretch")
@@ -1239,6 +1279,34 @@ def productividad_page():
             st.info("Sin información.")
         st.markdown("</div>", unsafe_allow_html=True)
 
+    section("Índice de actividades por colaborador", "Filtro por periodo y tienda.")
+    c3, c4, c5 = st.columns([1, 1, 2])
+    with c3:
+        idx_ini = st.date_input("Inicio índice", value=fecha_ini, key="idx_ini")
+    with c4:
+        idx_fin = st.date_input("Fin índice", value=fecha_fin, key="idx_fin")
+    with c5:
+        idx_tiendas = st.multiselect("Tienda índice", tiendas, placeholder="Todas las tiendas", key="idx_tiendas")
+
+    idx = op_all.copy()
+    if not idx.empty and "Fecha" in idx:
+        idx = idx[
+            (pd.to_datetime(idx["Fecha"], errors="coerce").dt.date >= idx_ini)
+            & (pd.to_datetime(idx["Fecha"], errors="coerce").dt.date <= idx_fin)
+        ]
+    if idx_tiendas and not idx.empty and "Tienda" in idx:
+        idx = idx[idx["Tienda"].isin(idx_tiendas)]
+    if not idx.empty:
+        index_df = idx.groupby(["Tienda", "Nombre", "Actividad Realizada"], dropna=False).agg(
+            Registros=("Actividad Realizada", "count"),
+            Piezas=("Número de Piezas", "sum"),
+            Acondicionado=("Acondicionado", "sum"),
+            Ubicado=("Ubicado", "sum"),
+        ).reset_index()
+    else:
+        index_df = pd.DataFrame()
+    panel("Índice de actividades", index_df, height=430, editable=is_admin)
+    excel_button(index_df, "indice_actividades_colaborador.xlsx")
 
 def recorridos_page():
     section("Recorridos", "Meta vs real.")
@@ -1388,8 +1456,8 @@ def usuarios_page():
 
 
 ROUTES = {
-    "Dashboard Ejecutivo": dashboard,
-    "Día Anterior": dia_anterior,
+    "Dashboard": dashboard,
+    "Por Día": dia_anterior,
     "Reporte Semanal": reporte_semanal,
     "Reporte Mensual": reporte_mensual,
     "Conversión": conversion_page,
