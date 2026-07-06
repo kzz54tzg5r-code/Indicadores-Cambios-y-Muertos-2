@@ -1,8 +1,11 @@
-# v8.6.9 fix carga simple
+# v8.7 Fix columna Tienda real
 
-Corrección:
-- Sustituye navegación por selectbox azul estable.
-- Elimina dependencia de st.pills/st.radio/st.tabs para evitar pantallas congeladas.
-- Renderiza automáticamente la pestaña seleccionada.
-- Botones ◀ ▶ permiten desplazarse entre pestañas.
-- Mantiene orden configurable desde Configuración.
+El Excel trae dos columnas llamadas Tienda:
+- La primera realmente es el folio/Occurrence numérico.
+- La segunda es la tienda real.
+
+Esta versión:
+- Busca todas las columnas Tienda/Tienda.1.
+- Elige la que contiene nombres reales de tiendas.
+- Descarta filas donde Tienda sea numérica.
+- En Diagnóstico muestra las columnas candidatas y la columna seleccionada.

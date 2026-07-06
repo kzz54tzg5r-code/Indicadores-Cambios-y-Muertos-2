@@ -353,6 +353,53 @@ def pick_first_existing(df, names):
             return c
     return None
 
+
+def tienda_candidate_cols(df):
+    cols = []
+    for c in df.columns:
+        nc = norm_text(c)
+        if nc == "TIENDA" or nc.startswith("TIENDA."):
+            cols.append(c)
+    return cols
+
+
+def best_tienda_col(df):
+    candidates = tienda_candidate_cols(df)
+    if not candidates:
+        return find_col(df, ["Tienda", "Sucursal"])
+
+    valid = [norm_text(x) for x in PROJECT_TIENDAS]
+    best = candidates[0]
+    best_score = -10**9
+
+    for c in candidates:
+        s = df[c].astype(str).fillna("").str.strip()
+        n = s.map(norm_text)
+        numeric_ratio = pd.to_numeric(s, errors="coerce").notna().mean() if len(s) else 1
+        store_hits = 0
+        for v in valid:
+            store_hits += n.str.contains(v, na=False).sum()
+        non_empty = (s != "").sum()
+        score = store_hits * 100 + non_empty - numeric_ratio * len(s) * 50
+        if score > best_score:
+            best_score = score
+            best = c
+    return best
+
+
+def best_occurrence_col(df):
+    # Si hay columna explícita de occurrence/ocurrencia, usarla.
+    c = pick_first_existing(df, ["Occurrence", "Ocurrencia", "Ba"]) if "pick_first_existing" in globals() else None
+    if c is not None:
+        return c
+    # Si una columna Tienda es numérica, esa es el folio/Occurrence.
+    for c in tienda_candidate_cols(df):
+        s = df[c].astype(str).str.strip()
+        numeric_ratio = pd.to_numeric(s, errors="coerce").notna().mean() if len(s) else 0
+        if numeric_ratio > 0.70:
+            return c
+    return None
+
 def find_col(df, candidates):
     norm_cols = {norm_text(c): c for c in df.columns}
     for cand in candidates:
@@ -1073,14 +1120,14 @@ def normalize_operation(df, sheet_name):
     # En "Resultados productividad" la tienda viene en la columna "Tienda".
     # Se usan columnas exactas primero para no confundir "Fecha s" con "Fecha".
     c_fecha = pick_first_existing(df, ["Fecha", "Fecha captura", "Día", "Dia"]) or find_col(df, ["Fecha", "Fecha captura", "Día", "Dia"])
-    c_tienda = pick_first_existing(df, ["Tienda", "Sucursal"]) or find_col(df, ["Tienda", "Sucursal"])
+    c_tienda = best_tienda_col(df)
     c_nombre = pick_first_existing(df, ["Nombre", "Usuario", "Colaborador"]) or find_col(df, ["Nombre", "Usuario", "Colaborador"])
     c_actividad = pick_first_existing(df, ["Actividad Realizada", "Actividad", "Tabla"]) or find_col(df, ["Actividad Realizada", "Actividad", "Tabla"])
     c_piezas = pick_first_existing(df, ["Número de Piezas", "Numero de Piezas", "Piezas", "Cantidad"]) or find_col(df, ["Número de Piezas", "Numero de Piezas", "Piezas", "Cantidad"])
     c_recorridos = pick_first_existing(df, ["Recorridos", "RECORRIDOS"]) or find_col(df, ["Recorridos", "RECORRIDOS"])
     c_hab = pick_first_existing(df, ["Habilitado", "Acondicionado", "Acondicionadas", "Piezas Habilitadas"]) or find_col(df, ["Habilitado", "Acondicionado", "Acondicionadas", "Piezas Habilitadas"])
     c_ubi = pick_first_existing(df, ["Ubicado", "Ubicadas", "Piezas Ubicadas"]) or find_col(df, ["Ubicado", "Ubicadas", "Piezas Ubicadas"])
-    c_ocurrencia = pick_first_existing(df, ["Occurrence", "Ocurrencia", "Ba"]) or find_col(df, ["Ocurrencia", "Occurrence", "Ba"])
+    c_ocurrencia = best_occurrence_col(df)
     c_area = pick_first_existing(df, ["Área", "Area"]) or find_col(df, ["Área", "Area"])
     c_motivo = pick_first_existing(df, ["Motivo de ingreso", "Motivo"]) or find_col(df, ["Motivo de ingreso", "Motivo"])
 
@@ -1089,10 +1136,9 @@ def normalize_operation(df, sheet_name):
     c_fecha_s = exact_col(df, "Fecha s")
     if out["Fecha"].isna().all() and c_fecha_s is not None:
         out["Fecha"] = pd.to_datetime(df[c_fecha_s], errors="coerce", dayfirst=True)
-    if exact_col(df, "Tienda") is not None:
-        out["Tienda"] = df[exact_col(df, "Tienda")].astype(str).map(canon_tienda)
-    else:
-        out["Tienda"] = df[c_tienda].astype(str).map(canon_tienda) if c_tienda else ""
+    # Usa la columna Tienda real. Si hay duplicadas, best_tienda_col evita la de occurrence numérica.
+    # Usa la columna Tienda real. Si hay duplicadas, best_tienda_col evita la de occurrence numérica.
+    out["Tienda"] = df[c_tienda].astype(str).map(canon_tienda) if c_tienda else ""
     out["Nombre"] = df[c_nombre].astype(str).str.strip() if c_nombre else ""
     out["Actividad Realizada"] = df[c_actividad].astype(str).str.strip() if c_actividad else ""
     out["Número de Piezas"] = to_number(df[c_piezas]) if c_piezas else 0
@@ -1117,6 +1163,14 @@ def normalize_operation(df, sheet_name):
     out["Semana ISO"] = out["Fecha"].dt.isocalendar().week.astype("Int64")
     out["Año ISO"] = out["Fecha"].dt.isocalendar().year.astype("Int64")
     out["Mes"] = out["Fecha"].dt.strftime("%Y-%m")
+    # Blindaje: si Tienda salió numérica, reintenta con otra columna candidata.
+    if "Tienda" in out and len(out) > 0:
+        numeric_ratio_tienda = pd.to_numeric(out["Tienda"].astype(str), errors="coerce").notna().mean()
+        if numeric_ratio_tienda > 0.50:
+            bt = best_tienda_col(df)
+            if bt is not None:
+                out["Tienda"] = df[bt].astype(str).map(canon_tienda)
+
     return out
 
 
@@ -1235,7 +1289,8 @@ def load_normalized(file_path, mtime):
             "Tipo detectado": kind,
             "Filas": len(df),
             "Columnas": len(df.columns),
-            "Col Tienda detectada": str(pick_first_existing(df, ["Tienda", "Sucursal"]) or find_col(df, ["Tienda", "Sucursal"])),
+            "Columnas Tienda candidatas": ", ".join([str(x) for x in tienda_candidate_cols(df)]),
+            "Col Tienda detectada": str(best_tienda_col(df)),
             "Col Fecha detectada": str(pick_first_existing(df, ["Fecha", "Fecha captura", "Día", "Dia"]) or find_col(df, ["Fecha", "Fecha captura", "Día", "Dia"])),
             "Col Piezas detectada": str(pick_first_existing(df, ["Número de Piezas", "Numero de Piezas", "Piezas", "Cantidad"]) or find_col(df, ["Número de Piezas", "Numero de Piezas", "Piezas", "Cantidad"])),
         })
@@ -1357,10 +1412,10 @@ def operational_table(op, co=None, tiendas_base=None, periodo_label="Día"):
     tiendas_op = []
     if not op.empty and "Tienda" in op:
         tiendas_op = [canon_tienda(t) for t in op["Tienda"].dropna().astype(str).tolist()]
-        tiendas_op = [t for t in tiendas_op if t and t.upper() != "NAN"]
+        tiendas_op = [t for t in tiendas_op if t and t.upper() != "NAN" and not str(t).strip().isdigit()]
 
     base_list = [canon_tienda(t) for t in (tiendas_base or [])]
-    tiendas_all = sorted(set([t for t in base_list + tiendas_op if t]))
+    tiendas_all = sorted(set([t for t in base_list + tiendas_op if t and not str(t).strip().isdigit()]))
 
     rows = []
     for t in tiendas_all:
@@ -1617,7 +1672,7 @@ tiendas = sorted(set([
         + (op_all["Tienda"].dropna().astype(str).map(canon_tienda).tolist() if not op_all.empty and "Tienda" in op_all else [])
         + (co_all["Tienda"].dropna().astype(str).map(canon_tienda).tolist() if not co_all.empty and "Tienda" in co_all else [])
     )
-    if t and t.upper() != "NAN"
+    if t and t.upper() != "NAN" and not str(t).strip().isdigit()
 ]))
 
 op_base, co_base, op, co = op_all.copy(), co_all.copy(), op_all.copy(), co_all.copy()
