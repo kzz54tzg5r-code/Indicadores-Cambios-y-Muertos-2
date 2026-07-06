@@ -254,11 +254,11 @@ def get_tab_order():
     raw = get_config_value("tab_order", json.dumps(default, ensure_ascii=False))
     try:
         order = json.loads(raw)
-        # garantiza que no falte ninguna pestaña
-        return [x for x in order if x in default] + [x for x in default if x not in order]
+        clean = [x for x in order if x in default]
+        clean = clean + [x for x in default if x not in clean]
+        return clean
     except Exception:
         return default
-
 
 def save_tab_order(order):
     default = ["Dashboard", "Por Día", "Reporte Semanal", "Reporte Mensual", "Conversión", "Recuperación Económica", "Productividad", "Recorridos", "Rankings", "Macro", "Diagnóstico", "Configuración", "Usuarios"]
@@ -780,6 +780,32 @@ def apply_styles():
         border-bottom-color:#EC007C !important;
     }}
 
+
+    /* Navegación estable con selectbox */
+    .nav-wrap {{
+        background:#10245F;
+        border-top:4px solid #EC007C;
+        margin:0 -1.6rem 18px -1.6rem;
+        padding:12px 18px;
+        box-shadow:0 8px 18px rgba(16,36,95,.16);
+    }}
+    .nav-wrap button {{
+        background:#142E73 !important;
+        color:#FFFFFF !important;
+        border:1px solid rgba(255,255,255,.20) !important;
+        font-weight:900 !important;
+    }}
+    .nav-wrap div[data-baseweb="select"] > div {{
+        background:#142E73 !important;
+        color:#FFFFFF !important;
+        border:1px solid rgba(255,255,255,.25) !important;
+        min-height:44px !important;
+    }}
+    .nav-wrap div[data-baseweb="select"] * {{
+        color:#FFFFFF !important;
+        font-weight:900 !important;
+    }}
+
     @media (max-width:1200px) {{
         .top-header {{ grid-template-columns:110px 1fr; }}
         .header-controls {{ display:none; }}
@@ -848,27 +874,36 @@ def nav_bar():
     if "page" not in st.session_state or st.session_state.page not in items:
         st.session_state.page = items[0]
 
-    # Key única por render para evitar StreamlitDuplicateElementKey aun si quedó otra llamada accidental.
-    nav_key = "nav_pestanas_unica_v868"
+    st.markdown('<div class="nav-wrap">', unsafe_allow_html=True)
+    c0, c1, c2 = st.columns([0.8, 7.8, 0.8])
 
-    try:
-        selected = st.pills(
-            "Pestañas",
-            items,
-            default=st.session_state.page,
-            label_visibility="collapsed",
-            key=nav_key,
-        )
-    except Exception:
+    with c0:
+        if st.button("◀", key="nav_prev_btn", use_container_width=True):
+            i = items.index(st.session_state.page)
+            st.session_state.page = items[(i - 1) % len(items)]
+            st.rerun()
+
+    with c1:
         selected = st.selectbox(
-            "Pestañas",
+            "Pestaña",
             items,
             index=items.index(st.session_state.page),
             label_visibility="collapsed",
-            key=nav_key,
+            key="nav_selectbox_v869",
         )
 
-    st.session_state.page = selected or st.session_state.page
+    with c2:
+        if st.button("▶", key="nav_next_btn", use_container_width=True):
+            i = items.index(st.session_state.page)
+            st.session_state.page = items[(i + 1) % len(items)]
+            st.rerun()
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    if selected != st.session_state.page:
+        st.session_state.page = selected
+        st.rerun()
+
     return st.session_state.page
 
 def section(title, subtitle=""):
@@ -2101,7 +2136,7 @@ ROUTES = {
     "Configuración": configuracion_page,
     "Usuarios": usuarios_page,
 }
-# navegación eliminada duplicada
+
 page = nav_bar()
 ROUTES.get(page, dashboard)()
 

@@ -1,7 +1,8 @@
-# v8.6.8 Fix navegación única
+# v8.6.9 fix carga simple
 
-Corrección definitiva:
-- Elimina llamadas duplicadas a nav_bar().
-- Sustituye st.radio por st.pills, y fallback a selectbox.
-- Usa una sola key de navegación.
-- El reporte se carga automáticamente al seleccionar pestaña.
+Corrección:
+- Sustituye navegación por selectbox azul estable.
+- Elimina dependencia de st.pills/st.radio/st.tabs para evitar pantallas congeladas.
+- Renderiza automáticamente la pestaña seleccionada.
+- Botones ◀ ▶ permiten desplazarse entre pestañas.
+- Mantiene orden configurable desde Configuración.
