@@ -15,6 +15,11 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 import plotly.express as px
+from reportlab.lib.pagesizes import landscape, letter
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet
+from io import BytesIO
 import plotly.graph_objects as go
 
 
@@ -414,8 +419,10 @@ def find_col(df, candidates):
 
 
 def to_number(s):
+    if isinstance(s, pd.Series):
+        return pd.to_numeric(s.astype(str).str.replace("$", "", regex=False).str.replace(",", "", regex=False).str.replace(" ", "", regex=False).replace({"-": "0", "": "0", "nan": "0"}), errors="coerce").fillna(0)
     try:
-        return pd.to_numeric(s, errors="coerce").fillna(0)
+        return float(str(s).replace("$", "").replace(",", "").strip() or 0)
     except Exception:
         return 0
 
@@ -853,6 +860,16 @@ def apply_styles():
         font-weight:900 !important;
     }}
 
+
+    /* v8.8 compacto y móvil */
+    .nav-wrap {{ padding:8px 18px !important; margin:0 -1.6rem 12px -1.6rem !important; }}
+    .nav-wrap div[data-baseweb="select"] > div {{ min-height:38px !important; height:38px !important; }}
+    .nav-wrap button {{ min-height:38px !important; height:38px !important; padding:4px 12px !important; }}
+    div[data-testid="stDataFrame"] [role="columnheader"], div[data-testid="stDataEditor"] [role="columnheader"] {{ background:#10245F !important; color:#FFFFFF !important; font-weight:800 !important; }}
+    div[data-testid="stDataFrame"] [role="columnheader"] *, div[data-testid="stDataEditor"] [role="columnheader"] * {{ color:#FFFFFF !important; fill:#FFFFFF !important; }}
+    div[data-testid="stDataFrame"] div[role="gridcell"], div[data-testid="stDataEditor"] div[role="gridcell"] {{ font-size:12px !important; }}
+    .stPlotlyChart {{ touch-action: pan-y !important; }}
+
     @media (max-width:1200px) {{
         .top-header {{ grid-template-columns:110px 1fr; }}
         .header-controls {{ display:none; }}
@@ -1002,10 +1019,25 @@ def format_table_for_display(df):
     if df is None or df.empty:
         return df
     out = df.copy()
+    rename = {
+        "Ingreso Aduana (Dev pzs)": "Dev pzs",
+        "Muertos Piso Venta": "Muertos",
+        "Ingresos Cajas": "Cajas",
+        "Total Ingresos": "Total",
+        "Pzas Recolectadas": "Recolectadas",
+        "Pzas Habilitadas": "Habilitadas",
+        "Pendiente por Habilitar": "Pend. Hab.",
+        "% Acondicionado": "% Acond.",
+        "Pzas Ubicadas": "Ubicadas",
+        "Pendiente por Ubicar": "Pend. Ubic.",
+        "% Ubicado": "% Ubic.",
+        "Pendientes del día anterior": "Pend. Ant.",
+    }
+    out = out.rename(columns=rename)
     for c in out.columns:
         if str(c).startswith("%"):
             out[c] = out[c].apply(lambda x: fmt_pct(x) if pd.notna(x) and str(x) != "" else "0.0%")
-        elif any(k in str(c).lower() for k in ["piezas", "ingresos", "pendiente", "total", "muertos", "cajas", "recolectadas", "habilitadas", "ubicadas"]):
+        elif any(k in str(c).lower() for k in ["piezas", "ingresos", "pendiente", "pend.", "total", "muertos", "cajas", "recolectadas", "habilitadas", "ubicadas", "dev pzs"]):
             if pd.api.types.is_numeric_dtype(out[c]):
                 out[c] = out[c].apply(lambda x: fmt_num(x))
     return out
@@ -1102,6 +1134,8 @@ def classify_sheet(name, df):
         return "plantilla"
     if "RESULTADOS" in nname and "PRODUCT" in nname:
         return "operacion"
+    if any(m in nname for m in ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"]):
+        return "comercial"
     score_op = sum(k in text for k in OP_KEYS)
     score_co = sum(k in text for k in COM_KEYS)
     if score_co > score_op:
@@ -1173,6 +1207,49 @@ def normalize_operation(df, sheet_name):
 
     return out
 
+
+
+def normalize_commercial_wide(df, sheet_name):
+    if df is None or df.empty:
+        return pd.DataFrame()
+    cols = list(df.columns)
+    rows = []
+    # Fechas pueden venir como encabezado superior y subencabezado en primera fila.
+    for idx, col in enumerate(cols):
+        sub_col = norm_text(col)
+        first_val = norm_text(df.iloc[0, idx]) if len(df) else ""
+        is_dev = ("DEV" in sub_col and "PZS" in sub_col) or ("DEV" in first_val and "PZS" in first_val)
+        if not is_dev:
+            continue
+        fecha = None
+        for j in range(idx, max(-1, idx-5), -1):
+            candidates = [cols[j]]
+            if len(df): candidates.append(df.iloc[0, j])
+            for cand in candidates:
+                parsed = pd.to_datetime(str(cand), errors="coerce", dayfirst=True)
+                if pd.notna(parsed):
+                    fecha = parsed
+                    break
+            if fecha is not None: break
+        if fecha is None: continue
+        dev_series = to_number(df[col])
+        # Si primera fila es subencabezado, su valor se vuelve NaN/0 y no afecta.
+        out = pd.DataFrame({"Fecha": fecha, "Tienda": "", "ID/Modelo": "", "Color": "", "Talla": "", "Dev_Pzs": dev_series, "Costo_Dev": 0, "Vta_Pzs": 0, "Vta_Imp": 0, "Hoja": sheet_name})
+        # ventas cercanas alrededor de la misma fecha
+        for j in range(max(0, idx-3), min(len(cols), idx+4)):
+            label = norm_text(cols[j]) + " " + (norm_text(df.iloc[0, j]) if len(df) else "")
+            if "VENTA" in label and "PZS" in label:
+                out["Vta_Pzs"] = to_number(df[cols[j]])
+            if "VENTA" in label and ("$" in str(cols[j]) or "$" in str(df.iloc[0, j] if len(df) else "") or "IMP" in label or "NETA EN" in label):
+                out["Vta_Imp"] = to_number(df[cols[j]])
+        out = out[out["Dev_Pzs"].fillna(0) != 0]
+        if not out.empty: rows.append(out)
+    if not rows: return pd.DataFrame()
+    out = pd.concat(rows, ignore_index=True)
+    out["Semana ISO"] = pd.to_datetime(out["Fecha"], errors="coerce").dt.isocalendar().week.astype("Int64")
+    out["Año ISO"] = pd.to_datetime(out["Fecha"], errors="coerce").dt.isocalendar().year.astype("Int64")
+    out["Mes"] = pd.to_datetime(out["Fecha"], errors="coerce").dt.strftime("%Y-%m")
+    return out
 
 def normalize_commercial(df, sheet_name):
     if df is None or df.empty:
@@ -1297,7 +1374,10 @@ def load_normalized(file_path, mtime):
         if kind == "operacion":
             ops.append(normalize_operation(df, name))
         elif kind == "comercial":
-            coms.append(normalize_commercial(df, name))
+            norm_co = normalize_commercial(df, name)
+            if norm_co.empty:
+                norm_co = normalize_commercial_wide(df, name)
+            coms.append(norm_co)
     op = pd.concat(ops, ignore_index=True) if ops else pd.DataFrame()
     co = pd.concat(coms, ignore_index=True) if coms else pd.DataFrame()
     nombre_map = build_nombre_map(sheets)
@@ -1516,16 +1596,40 @@ def combined_chart(df, title):
     hab_col = "Pzas Habilitadas" if "Pzas Habilitadas" in p else "Piezas Acondicionadas"
     ubi_col = "Pzas Ubicadas" if "Pzas Ubicadas" in p else "Piezas Ubicadas"
     fig = go.Figure()
-    fig.add_trace(go.Bar(x=x, y=p[hab_col], name="Habilitado"))
-    fig.add_trace(go.Bar(x=x, y=p[ubi_col], name="Ubicado"))
-    fig.add_trace(go.Scatter(x=x, y=p[ingresos_col], mode="lines+markers+text", name="Ingresos", text=p[ingresos_col].round(0)))
-    fig.update_layout(title=title, barmode="group", height=430, margin=dict(l=10, r=10, t=45, b=90))
-    st.plotly_chart(fig, width="stretch")
+    fig.add_trace(go.Scatter(x=x, y=p[ingresos_col], mode="lines+markers+text", name="Total ingresos", text=p[ingresos_col].round(0), textposition="top center"))
+    fig.add_trace(go.Bar(x=x, y=p[hab_col], name="Pzas Habilitadas"))
+    fig.add_trace(go.Bar(x=x, y=p[ubi_col], name="Pzas Ubicadas"))
+    fig.update_layout(title=title, barmode="group", height=420, dragmode=False, hovermode="x unified", margin=dict(l=10,r=10,t=45,b=95), legend=dict(orientation="h", y=1.13, x=.52), plot_bgcolor="white", paper_bgcolor="white")
+    fig.update_xaxes(tickangle=-45, fixedrange=True)
+    fig.update_yaxes(fixedrange=True, gridcolor="#E5E7EB")
+    st.plotly_chart(fig, width="stretch", config={"scrollZoom": False, "displayModeBar": False, "doubleClick": False, "responsive": True})
 
-def pdf_placeholder(title):
-    # PDF básico temporal: descarga resumen/tablas principales. Evita romper Streamlit por reportlab.
-    content = f"{title}\\nGenerado: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\\n"
-    st.download_button("Descargar PDF", content.encode("utf-8"), f"{title.lower().replace(' ', '_')}.pdf", "application/pdf")
+
+def make_pdf_bytes(title, df=None, resumen=None):
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), rightMargin=18, leftMargin=18, topMargin=18, bottomMargin=18)
+    styles = getSampleStyleSheet()
+    story = [Paragraph(f"<b>{title}</b>", styles["Title"]), Paragraph("Operaciones Ropa | Indicadores Cambios y Muertos", styles["Normal"]), Spacer(1, 8)]
+    if resumen:
+        data = [["Indicador", "Valor"]] + [[str(k), str(v)] for k, v in resumen.items()]
+        t = Table(data, repeatRows=1)
+        t.setStyle(TableStyle([("BACKGROUND", (0,0), (-1,0), colors.HexColor("#EC007C")), ("TEXTCOLOR", (0,0), (-1,0), colors.white), ("GRID", (0,0), (-1,-1), .25, colors.HexColor("#CBD5E1")), ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"), ("FONTSIZE", (0,0), (-1,-1), 7)]))
+        story += [t, Spacer(1, 8)]
+    if df is not None and not df.empty:
+        dfx = format_table_for_display(df.head(35)).astype(str)
+        data = [list(dfx.columns)] + dfx.values.tolist()
+        t = Table(data, repeatRows=1)
+        t.setStyle(TableStyle([("BACKGROUND", (0,0), (-1,0), colors.HexColor("#10245F")), ("TEXTCOLOR", (0,0), (-1,0), colors.white), ("GRID", (0,0), (-1,-1), .2, colors.HexColor("#CBD5E1")), ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"), ("FONTSIZE", (0,0), (-1,-1), 5.5), ("VALIGN", (0,0), (-1,-1), "MIDDLE")]))
+        story.append(t)
+    story += [Spacer(1, 8), Paragraph("CONFIDENCIAL | Price Shoes | Operaciones Ropa", styles["Normal"])]
+    doc.build(story)
+    return buffer.getvalue()
+
+
+def pdf_placeholder(title, df=None, resumen=None):
+    pdf = make_pdf_bytes(title, df=df, resumen=resumen)
+    st.download_button("Descargar PDF", pdf, f"{title.lower().replace(' ', '_').replace('/', '_')}.pdf", "application/pdf")
+
 
 def conversion(co):
     base_k = {"Dev Pzs": 0, "Conversión Pzs": 0, "Conversión $": 0, "Pendiente Pzs": 0, "% Conversión": 0, "No Convertido $": 0}
@@ -1779,7 +1883,7 @@ def dia_anterior():
     res["% Ubicado"] = safe_div(res["Ubicado"], res["Ingresos"])
 
     kpis(res)
-    pdf_placeholder("Reporte Por Dia")
+    pdf_placeholder("Reporte Por Día", df=table, resumen=res)
     panel("Tabla por tienda - Por Día", table, height=390, editable=is_admin)
     combined_chart(table, "Ingresos vs Acondicionado y Ubicado por tienda")
     excel_button(table, "reporte_por_dia.xlsx")
@@ -1810,7 +1914,7 @@ def reporte_semanal():
     res["% Ubicado"] = safe_div(res["Ubicado"], res["Ingresos"])
 
     kpis(res)
-    pdf_placeholder("Reporte Semanal")
+    pdf_placeholder("Reporte Semanal", df=table, resumen=res)
     panel("Tabla por tienda - Reporte Semanal", table, height=390, editable=is_admin)
     combined_chart(table, "Ingresos vs Acondicionado y Ubicado por tienda")
     excel_button(table, "reporte_semanal.xlsx")
@@ -1841,7 +1945,7 @@ def reporte_mensual():
     res["% Ubicado"] = safe_div(res["Ubicado"], res["Ingresos"])
 
     kpis(res)
-    pdf_placeholder("Reporte Mensual")
+    pdf_placeholder("Reporte Mensual", df=table, resumen=res)
     panel("Tabla por tienda - Reporte Mensual", table, height=390, editable=is_admin)
     combined_chart(table, "Ingresos vs Acondicionado y Ubicado por tienda")
     excel_button(table, "reporte_mensual.xlsx")
@@ -1872,7 +1976,7 @@ def conversion_page():
     c4.metric("% Conversión", fmt_pct(conv_page_kpis.get("% Conversión", 0)))
     c5.metric("Pendiente Pzs", fmt_num(conv_page_kpis.get("Pendiente Pzs", 0)))
 
-    pdf_placeholder("Conversion Dev Venta")
+    pdf_placeholder("Conversión Dev Venta", df=conv_page_df, resumen=conv_page_kpis)
     panel("Detalle de conversión", conv_page_df, height=430, editable=is_admin)
     excel_button(conv_page_df, "conversion_semanal_dev_venta.xlsx")
 
@@ -1898,7 +2002,7 @@ def recuperacion():
     c2.metric("Venta No Convertida $", fmt_money(rec_kpis.get("No Convertido $", 0)))
     c3.metric("% Conversión", fmt_pct(rec_kpis.get("% Conversión", 0)))
 
-    pdf_placeholder("Recuperacion Economica")
+    pdf_placeholder("Recuperación Económica", df=rec_df, resumen=rec_kpis)
     panel("Detalle económico", rec_df, height=430, editable=is_admin)
     excel_button(rec_df, "recuperacion_economica.xlsx")
 
