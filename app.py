@@ -46,6 +46,7 @@ CONFIG_DIR = DATA_DIR / "config"
 ACTIVE_FILE = UPLOAD_DIR / "base_activa.xlsx"
 META_FILE = CONFIG_DIR / "metadata.json"
 DB_FILE = CONFIG_DIR / "app_config.db"
+USERS_BACKUP = CONFIG_DIR / "users_backup.json"
 
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 CONFIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -59,6 +60,25 @@ def db_conn():
     conn = sqlite3.connect(DB_FILE)
     conn.row_factory = sqlite3.Row
     return conn
+
+
+
+def load_users_backup():
+    if USERS_BACKUP.exists():
+        try:
+            data = json.loads(USERS_BACKUP.read_text(encoding="utf-8"))
+            return data if isinstance(data, list) else []
+        except Exception:
+            return []
+    return []
+
+
+def save_users_backup(users):
+    try:
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        USERS_BACKUP.write_text(json.dumps(users, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        pass
 
 
 def init_db():
@@ -82,12 +102,28 @@ def init_db():
     """)
     conn.commit()
 
-    total = cur.execute("SELECT COUNT(*) AS total FROM users").fetchone()["total"]
-    if total == 0:
-        cur.execute(
-            "INSERT INTO users VALUES (?, ?, ?, ?, ?, ?)",
-            ("admin", "Administrador", "Administrador", "admin123", 1, datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
-        )
+    # Usuario inicial de rescate
+    cur.execute(
+        "INSERT OR IGNORE INTO users VALUES (?, ?, ?, ?, ?, ?)",
+        ("admin", "Administrador", "Administrador", "admin123", 1, datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+    )
+
+    # Restaurar usuarios creados desde respaldo local si existe.
+    for u in load_users_backup():
+        try:
+            cur.execute(
+                "INSERT OR IGNORE INTO users VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    str(u.get("nomina", "")).strip(),
+                    str(u.get("nombre", "")).strip() or str(u.get("nomina", "")).strip(),
+                    str(u.get("permiso", "Consulta")).strip(),
+                    str(u.get("password", "")).strip(),
+                    int(bool(u.get("activo", True))),
+                    str(u.get("created_at", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))),
+                ),
+            )
+        except Exception:
+            pass
 
     for k, v in {
         "productividad_diaria": "784",
@@ -99,7 +135,6 @@ def init_db():
         cur.execute("INSERT OR IGNORE INTO goals VALUES (?, ?)", (k, v))
     conn.commit()
     conn.close()
-
 
 def load_users():
     init_db()
@@ -133,6 +168,9 @@ def upsert_user(nomina, nombre, permiso, password=None, activo=True):
             (nomina, nombre, permiso, password, int(activo), datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
         )
     conn.commit()
+    # Respaldo JSON de usuarios
+    rows = conn.execute("SELECT * FROM users ORDER BY permiso DESC, nombre").fetchall()
+    save_users_backup([dict(r) | {"activo": bool(r["activo"])} for r in rows])
     conn.close()
 
 
@@ -140,6 +178,8 @@ def delete_user(nomina):
     conn = db_conn()
     conn.execute("DELETE FROM users WHERE nomina=?", (nomina,))
     conn.commit()
+    rows = conn.execute("SELECT * FROM users ORDER BY permiso DESC, nombre").fetchall()
+    save_users_backup([dict(r) | {"activo": bool(r["activo"])} for r in rows])
     conn.close()
 
 
@@ -185,17 +225,29 @@ def set_config_value(key, value):
 
 def get_project_stores():
     raw = get_config_value("project_stores", "[]")
+    default = ["Arco Norte", "Ecatepec", "Miravalle", "Puebla Sur", "Vallejo"]
     try:
         stores = json.loads(raw)
-        return [canon_tienda(x) for x in stores if canon_tienda(x)]
+        clean = []
+        valid_norm = {norm_text(x): x for x in PROJECT_TIENDAS}
+        for x in stores:
+            t = canon_tienda(x)
+            # Evita que se guarden/usen occurrences o números como tiendas.
+            if norm_text(t) in valid_norm:
+                clean.append(valid_norm[norm_text(t)])
+        # Si el historial guardó occurrence IDs, se descartan y vuelve al proyecto base.
+        return sorted(set(clean), key=lambda v: PROJECT_TIENDAS.index(v) if v in PROJECT_TIENDAS else 999) if clean else default
     except Exception:
-        return ["Arco Norte", "Ecatepec", "Miravalle", "Puebla Sur", "Vallejo"]
-
+        return default
 
 def save_project_stores(stores):
-    clean = [canon_tienda(x) for x in stores if canon_tienda(x)]
-    set_config_value("project_stores", json.dumps(clean, ensure_ascii=False))
-
+    valid_norm = {norm_text(x): x for x in PROJECT_TIENDAS}
+    clean = []
+    for x in stores:
+        t = canon_tienda(x)
+        if norm_text(t) in valid_norm:
+            clean.append(valid_norm[norm_text(t)])
+    set_config_value("project_stores", json.dumps(sorted(set(clean), key=lambda v: PROJECT_TIENDAS.index(v)), ensure_ascii=False))
 
 def get_tab_order():
     default = ["Dashboard", "Por Día", "Reporte Semanal", "Reporte Mensual", "Conversión", "Recuperación Económica", "Productividad", "Recorridos", "Rankings", "Macro", "Diagnóstico", "Configuración", "Usuarios"]
@@ -640,6 +692,55 @@ def apply_styles():
         color:#FFFFFF !important;
     }}
 
+
+    /* Navegación automática tipo pestañas */
+    div[data-testid="stRadio"] > div {{
+        background:#10245F !important;
+        border-top:4px solid #EC007C !important;
+        border-radius:0 !important;
+        padding:0 !important;
+        gap:0 !important;
+        overflow-x:auto !important;
+        white-space:nowrap !important;
+        flex-wrap:nowrap !important;
+        margin:0 -1.6rem 16px -1.6rem !important;
+        box-shadow:0 8px 18px rgba(16,36,95,.16);
+    }}
+    div[data-testid="stRadio"] label {{
+        background:#10245F !important;
+        padding:14px 22px !important;
+        border-radius:0 !important;
+        border-bottom:4px solid transparent !important;
+        min-width:max-content !important;
+    }}
+    div[data-testid="stRadio"] label > div:first-child {{
+        display:none !important;
+    }}
+    div[data-testid="stRadio"] label p,
+    div[data-testid="stRadio"] label span,
+    div[data-testid="stRadio"] label div {{
+        color:rgba(255,255,255,.62) !important;
+        font-weight:800 !important;
+        font-size:14px !important;
+    }}
+    div[data-testid="stRadio"] label:hover {{
+        background:#142E73 !important;
+    }}
+    div[data-testid="stRadio"] label:hover p,
+    div[data-testid="stRadio"] label:hover span,
+    div[data-testid="stRadio"] label:hover div {{
+        color:rgba(255,255,255,.90) !important;
+    }}
+    div[data-testid="stRadio"] label:has(input:checked) {{
+        background:#142E73 !important;
+        border-bottom-color:#EC007C !important;
+    }}
+    div[data-testid="stRadio"] label:has(input:checked) p,
+    div[data-testid="stRadio"] label:has(input:checked) span,
+    div[data-testid="stRadio"] label:has(input:checked) div {{
+        color:#FFFFFF !important;
+    }}
+
     @media (max-width:1200px) {{
         .top-header {{ grid-template-columns:110px 1fr; }}
         .header-controls {{ display:none; }}
@@ -695,9 +796,25 @@ def login_screen():
 
 
 def nav_bar():
-    # Se mantiene para compatibilidad, pero la navegación real usa st.tabs al final.
-    items = get_tab_order()
-    return items[0] if items else "Dashboard"
+    items = [t for t in get_tab_order() if t in [
+        "Dashboard", "Por Día", "Reporte Semanal", "Reporte Mensual", "Conversión",
+        "Recuperación Económica", "Productividad", "Recorridos", "Rankings",
+        "Macro", "Diagnóstico", "Configuración", "Usuarios"
+    ]]
+    if not items:
+        items = ["Dashboard", "Por Día", "Reporte Semanal", "Reporte Mensual", "Conversión", "Recuperación Económica", "Productividad", "Recorridos", "Rankings", "Macro", "Diagnóstico", "Configuración", "Usuarios"]
+    if "page" not in st.session_state or st.session_state.page not in items:
+        st.session_state.page = items[0]
+    selected = st.radio(
+        "Pestañas",
+        items,
+        index=items.index(st.session_state.page),
+        horizontal=True,
+        label_visibility="collapsed",
+        key="page_selector_auto",
+    )
+    st.session_state.page = selected
+    return selected
 
 def section(title, subtitle=""):
     st.markdown(f'<div class="section-title">{title}</div><div class="section-subtitle">{subtitle}</div>', unsafe_allow_html=True)
@@ -1428,7 +1545,7 @@ goals = load_goals()
 
 project_stores = get_project_stores()
 if not project_stores:
-    project_stores = PROJECT_TIENDAS
+    project_stores = ["Arco Norte", "Ecatepec", "Miravalle", "Puebla Sur", "Vallejo"]
 
 # PÁGINAS
 # ============================================================
@@ -1930,23 +2047,8 @@ ROUTES = {
     "Usuarios": usuarios_page,
 }
 
-tab_items = [t for t in get_tab_order() if t in ROUTES]
-tabs = st.tabs(tab_items)
-
-# st.tabs construye todas las pestañas visualmente, pero sólo ejecutamos el contenido
-# de una pestaña persistida por sesión para evitar que todas las secciones pesadas carguen a la vez.
-# Como Streamlit no expone la pestaña activa en Python, colocamos botones ligeros dentro de cada tab.
-if "active_tab_page" not in st.session_state:
-    st.session_state.active_tab_page = tab_items[0] if tab_items else "Dashboard"
-
-for tab, tab_name in zip(tabs, tab_items):
-    with tab:
-        if st.button(f"Abrir {tab_name}", key=f"open_{tab_name}", use_container_width=True):
-            st.session_state.active_tab_page = tab_name
-            st.rerun()
-        if st.session_state.active_tab_page == tab_name:
-            ROUTES.get(tab_name, dashboard)()
-
+page = nav_bar()
+ROUTES.get(page, dashboard)()
 
 st.markdown("---")
 st.caption("CONFIDENCIAL | Price Shoes | Operaciones Ropa")

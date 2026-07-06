@@ -1,9 +1,9 @@
-# Indicadores Cambios y Muertos v8.6.4
+# Indicadores Cambios y Muertos v8.6.6
 
 Correcciones:
-- Evita que la app se quede pensando al cambiar pestañas.
-- Sustituye radio de navegación por st.tabs estable.
-- Cada pestaña tiene botón Abrir para ejecutar sólo esa sección y evitar carga simultánea pesada.
-- Conversión y Recuperación ya no se quedan cargando si no existe hoja comercial; muestran aviso.
-- Mantiene orden de pestañas configurable en Configuración.
-- Mantiene columnas de tienda desde Resultados productividad.
+- Reportes automáticos al seleccionar pestaña; se elimina botón "Abrir reporte".
+- Pestañas con letras blancas: seleccionada intensa, no seleccionadas tenues.
+- Usuarios creados se respaldan en JSON local además de SQLite.
+- Tiendas del proyecto se limpian automáticamente: ya no acepta números de occurrence como tiendas.
+- Si existía una configuración dañada con occurrences, vuelve a Arco Norte, Ecatepec, Miravalle, Puebla Sur y Vallejo.
+- Mantiene tienda tomada desde columna Tienda de Resultados productividad.
