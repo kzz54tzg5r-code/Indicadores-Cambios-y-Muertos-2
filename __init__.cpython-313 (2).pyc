@@ -1,0 +1,138 @@
+
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+from core.styles import section
+from core.ui import panel, kpis, combined_chart, excel_download
+from core.calculations import resumen_ejecutivo, operational_table, productividad, indice_actividades, conversion
+from core.pdf import pdf_bytes
+from core.utils import fmt_num, fmt_pct, fmt_money
+
+def download_pdf(title, df=None, resumen=None):
+    st.download_button("Descargar PDF", pdf_bytes(title, df, resumen), f"{title.lower().replace(' ','_')}.pdf", "application/pdf")
+
+def dashboard(ctx):
+    op=ctx["op"]; tiendas=ctx["tiendas"]
+    op = op[op["Tienda"].isin(tiendas)] if not op.empty and "Tienda" in op else op
+    res=resumen_ejecutivo(op)
+    section("Dashboard Ejecutivo","Resumen operativo del proyecto.")
+    kpis(res); download_pdf("Dashboard Ejecutivo", operational_table(op, tiendas), res)
+    table=operational_table(op, tiendas)
+    panel("Resumen por tienda", table, 380)
+    combined_chart(table, "Ingresos vs Habilitadas y Ubicadas")
+
+def por_dia(ctx):
+    op=ctx["op"]; tiendas=ctx["tiendas"]
+    section("Por Día","Filtro calendario y tabla por tienda.")
+    fechas=sorted(pd.to_datetime(op["Fecha"],errors="coerce").dropna().dt.date.unique().tolist()) if not op.empty else []
+    f=st.date_input("Fecha", value=fechas[-1] if fechas else pd.Timestamp.today().date())
+    d=pd.to_datetime(f).normalize()
+    od=op[pd.to_datetime(op["Fecha"],errors="coerce").dt.normalize()==d] if not op.empty else op
+    table=operational_table(od, tiendas)
+    res=resumen_ejecutivo(od)
+    kpis(res); download_pdf("Reporte Por Día", table, res)
+    panel("Tabla por tienda", table, 390); combined_chart(table, "Ingresos vs Habilitadas y Ubicadas"); excel_download(table,"por_dia.xlsx")
+
+def semanal(ctx):
+    op=ctx["op"]; tiendas=ctx["tiendas"]
+    section("Reporte Semanal","Filtro por tienda y semana ISO.")
+    c1,c2=st.columns(2)
+    with c1: ts=st.multiselect("Tiendas", tiendas, default=[])
+    semanas=sorted(op["Semana ISO"].dropna().astype(int).unique().tolist()) if not op.empty and "Semana ISO" in op else []
+    with c2: ss=st.multiselect("Semana ISO", semanas, default=semanas[-1:] if semanas else [])
+    o=op.copy()
+    if ts: o=o[o["Tienda"].isin(ts)]
+    if ss: o=o[o["Semana ISO"].isin(ss)]
+    table=operational_table(o, ts or tiendas); res=resumen_ejecutivo(o)
+    kpis(res); download_pdf("Reporte Semanal", table, res); panel("Tabla semanal por tienda", table, 390); combined_chart(table, "Semanal: Total vs Habilitadas y Ubicadas")
+
+def mensual(ctx):
+    op=ctx["op"]; tiendas=ctx["tiendas"]
+    section("Reporte Mensual","Filtro por tienda y mes.")
+    c1,c2=st.columns(2)
+    with c1: ts=st.multiselect("Tiendas", tiendas, default=[], key="mes_t")
+    meses=sorted(op["Mes"].dropna().astype(str).unique().tolist()) if not op.empty and "Mes" in op else []
+    with c2: ms=st.multiselect("Mes", meses, default=meses[-1:] if meses else [])
+    o=op.copy()
+    if ts: o=o[o["Tienda"].isin(ts)]
+    if ms: o=o[o["Mes"].isin(ms)]
+    table=operational_table(o, ts or tiendas); res=resumen_ejecutivo(o)
+    kpis(res); download_pdf("Reporte Mensual", table, res); panel("Tabla mensual por tienda", table, 390); combined_chart(table, "Mensual: Total vs Habilitadas y Ubicadas")
+
+def productividad_page(ctx):
+    op=ctx["op"]; metas=ctx["metas"]
+    section("Productividad","Top colaboradores e índice de actividades por colaborador.")
+    if op.empty: return st.info("Sin información.")
+    op=op.copy(); op["Fecha"]=pd.to_datetime(op["Fecha"],errors="coerce"); op=op[op["Fecha"].notna()]
+    c1,c2=st.columns(2)
+    minf,maxf=op["Fecha"].min().date(),op["Fecha"].max().date()
+    with c1: per=st.date_input("Periodo", value=(minf,maxf), min_value=minf, max_value=maxf)
+    tiendas=sorted(op["Tienda"].dropna().unique().tolist())
+    with c2: ts=st.multiselect("Tienda", tiendas, default=[])
+    if isinstance(per,tuple): ini,fin=per
+    else: ini=fin=per
+    f=op[(op["Fecha"]>=pd.to_datetime(ini)) & (op["Fecha"]<=pd.to_datetime(fin)+pd.Timedelta(days=1))]
+    if ts: f=f[f["Tienda"].isin(ts)]
+    prod=productividad(f, metas.get("productividad_diaria",784))
+    idx=indice_actividades(f)
+    res={"Colaboradores":prod["Nombre"].nunique() if not prod.empty else 0,"Piezas":fmt_num(prod["Piezas"].sum() if not prod.empty else 0),"Productividad prom.":f'{prod["Productividad diaria"].mean():.1f}' if not prod.empty else "0"}
+    k1,k2,k3=st.columns(3); k1.metric("Colaboradores",res["Colaboradores"]); k2.metric("Piezas",res["Piezas"]); k3.metric("Productividad prom.",res["Productividad prom."])
+    download_pdf("Productividad", prod, res)
+    panel("Top colaboradores", prod.head(20), 430)
+    if not prod.empty:
+        p=prod.head(15).sort_values("Productividad diaria")
+        fig=px.bar(p, x="Productividad diaria", y="Nombre", orientation="h", text="Productividad diaria")
+        fig.update_layout(height=460, dragmode=False, plot_bgcolor="white", paper_bgcolor="white")
+        fig.update_xaxes(fixedrange=True); fig.update_yaxes(fixedrange=True)
+        st.plotly_chart(fig, width="stretch", config={"scrollZoom":False,"displayModeBar":False,"doubleClick":False})
+    panel("Índice de actividades por colaborador", idx, 520); excel_download(idx,"indice_actividades.xlsx")
+
+def conversion_page(ctx):
+    co=ctx["co"]; section("Conversión","Todas las tiendas. Misma semana ISO, tienda, modelo y color.")
+    if co.empty: return st.warning("No se detectó información comercial.")
+    semanas=sorted(co["Semana ISO"].dropna().astype(int).unique().tolist())
+    ss=st.multiselect("Semana ISO", semanas, default=semanas[-1:] if semanas else [])
+    c=co[co["Semana ISO"].isin(ss)] if ss else co
+    df,k=conversion(c)
+    a,b,c1,d,e=st.columns(5); a.metric("Dev Pzs",fmt_num(k["Dev Pzs"])); b.metric("Conversión Pzs",fmt_num(k["Conversión Pzs"])); c1.metric("Conversión $",fmt_money(k["Conversión $"])); d.metric("% Conversión",fmt_pct(k["% Conversión"])); e.metric("Pendiente",fmt_num(k["Pendiente Pzs"]))
+    download_pdf("Conversión Dev Venta", df, k); panel("Detalle conversión", df, 430)
+
+def recuperacion(ctx):
+    co=ctx["co"]; section("Recuperación Económica","Todas las tiendas.")
+    if co.empty: return st.warning("No se detectó información comercial.")
+    df,k=conversion(co)
+    a,b,c=st.columns(3); a.metric("Recuperación $",fmt_money(k["Conversión $"])); b.metric("Venta No Convertida $",fmt_money(k["No Convertido $"])); c.metric("% Conversión",fmt_pct(k["% Conversión"]))
+    download_pdf("Recuperación Económica", df, k); panel("Detalle económico", df, 430)
+
+def simple_table(ctx, title, df):
+    section(title,"Consulta de información.")
+    panel(title, df, 500)
+
+def configuracion(ctx):
+    from core.storage import load_project, save_project, load_users, save_users, save_goals
+    from core.utils import PROJECT_TIENDAS
+    user=ctx["user"]
+    section("Configuración","Tiendas del proyecto, metas y pestañas.")
+    if user.get("permiso")!="Administrador": return st.warning("Sólo administrador.")
+    p=load_project(); metas=ctx["metas"]
+    tiendas=st.multiselect("Tiendas del proyecto", PROJECT_TIENDAS, default=p.get("tiendas_proyecto",[]))
+    metas["productividad_diaria"]=st.number_input("Meta productividad diaria", value=int(metas.get("productividad_diaria",784)))
+    if st.button("Guardar configuración"):
+        p["tiendas_proyecto"]=tiendas; save_project(p); save_goals(metas); st.success("Guardado"); st.rerun()
+
+def usuarios(ctx):
+    from core.storage import load_users, save_users
+    user=ctx["user"]; section("Usuarios","Crear y administrar accesos.")
+    if user.get("permiso")!="Administrador": return st.warning("Sólo administrador.")
+    users=load_users()
+    with st.form("nuevo_usuario"):
+        c1,c2,c3,c4=st.columns(4)
+        nom=c1.text_input("Nómina/Usuario"); nombre=c2.text_input("Nombre"); permiso=c3.selectbox("Permiso",["Consulta","Administrador"]); pwd=c4.text_input("Contraseña", type="password")
+        if st.form_submit_button("Crear usuario"):
+            users.append({"nomina":nom,"nombre":nombre or nom,"permiso":permiso,"password":pwd,"activo":True}); save_users(users); st.success("Usuario creado"); st.rerun()
+    edited=st.data_editor(pd.DataFrame([{k:v for k,v in u.items() if k!="password"} for u in users]), hide_index=True, width="stretch")
+    if st.button("Guardar cambios usuarios"):
+        old={u["nomina"]:u for u in users}; new=[]
+        for _,r in edited.iterrows():
+            d=r.to_dict(); d["password"]=old.get(d["nomina"],{}).get("password",""); new.append(d)
+        save_users(new); st.success("Guardado"); st.rerun()
