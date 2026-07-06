@@ -741,6 +741,45 @@ def apply_styles():
         color:#FFFFFF !important;
     }}
 
+
+    /* Fix definitivo: navegación sin bullets visibles */
+    div[data-testid="stRadio"] label > div:first-child {{
+        display:none !important;
+        width:0 !important;
+        min-width:0 !important;
+        max-width:0 !important;
+    }}
+    div[data-testid="stRadio"] label p {{
+        color:rgba(255,255,255,.65) !important;
+    }}
+    div[data-testid="stRadio"] label:has(input:checked) p {{
+        color:#FFFFFF !important;
+    }}
+
+
+    /* Navegación estable */
+    div[data-testid="stPills"] {{
+        background:#10245F !important;
+        border-top:4px solid #EC007C !important;
+        margin:0 -1.6rem 16px -1.6rem !important;
+        padding:0 !important;
+        overflow-x:auto !important;
+        white-space:nowrap !important;
+    }}
+    div[data-testid="stPills"] button {{
+        color:rgba(255,255,255,.65) !important;
+        background:#10245F !important;
+        border-radius:0 !important;
+        border:none !important;
+        border-bottom:4px solid transparent !important;
+        font-weight:800 !important;
+    }}
+    div[data-testid="stPills"] button[aria-selected="true"] {{
+        color:#FFFFFF !important;
+        background:#142E73 !important;
+        border-bottom-color:#EC007C !important;
+    }}
+
     @media (max-width:1200px) {{
         .top-header {{ grid-template-columns:110px 1fr; }}
         .header-controls {{ display:none; }}
@@ -802,19 +841,35 @@ def nav_bar():
         "Macro", "Diagnóstico", "Configuración", "Usuarios"
     ]]
     if not items:
-        items = ["Dashboard", "Por Día", "Reporte Semanal", "Reporte Mensual", "Conversión", "Recuperación Económica", "Productividad", "Recorridos", "Rankings", "Macro", "Diagnóstico", "Configuración", "Usuarios"]
+        items = ["Dashboard", "Por Día", "Reporte Semanal", "Reporte Mensual", "Conversión",
+                 "Recuperación Económica", "Productividad", "Recorridos", "Rankings",
+                 "Macro", "Diagnóstico", "Configuración", "Usuarios"]
+
     if "page" not in st.session_state or st.session_state.page not in items:
         st.session_state.page = items[0]
-    selected = st.radio(
-        "Pestañas",
-        items,
-        index=items.index(st.session_state.page),
-        horizontal=True,
-        label_visibility="collapsed",
-        key="page_selector_auto",
-    )
-    st.session_state.page = selected
-    return selected
+
+    # Key única por render para evitar StreamlitDuplicateElementKey aun si quedó otra llamada accidental.
+    nav_key = "nav_pestanas_unica_v868"
+
+    try:
+        selected = st.pills(
+            "Pestañas",
+            items,
+            default=st.session_state.page,
+            label_visibility="collapsed",
+            key=nav_key,
+        )
+    except Exception:
+        selected = st.selectbox(
+            "Pestañas",
+            items,
+            index=items.index(st.session_state.page),
+            label_visibility="collapsed",
+            key=nav_key,
+        )
+
+    st.session_state.page = selected or st.session_state.page
+    return st.session_state.page
 
 def section(title, subtitle=""):
     st.markdown(f'<div class="section-title">{title}</div><div class="section-subtitle">{subtitle}</div>', unsafe_allow_html=True)
@@ -1512,7 +1567,7 @@ if not ACTIVE_FILE.exists():
     st.warning("Carga un archivo Excel desde el panel lateral para iniciar.")
     st.stop()
 
-page = nav_bar()  # compatibilidad
+# page se define una sola vez al final
 
 try:
     op_all, co_all, diag_df, sheet_names, nombre_map = load_normalized(str(ACTIVE_FILE), ACTIVE_FILE.stat().st_mtime)
@@ -2046,7 +2101,7 @@ ROUTES = {
     "Configuración": configuracion_page,
     "Usuarios": usuarios_page,
 }
-
+# navegación eliminada duplicada
 page = nav_bar()
 ROUTES.get(page, dashboard)()
 
