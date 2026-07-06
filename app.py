@@ -870,6 +870,70 @@ def apply_styles():
     div[data-testid="stDataFrame"] div[role="gridcell"], div[data-testid="stDataEditor"] div[role="gridcell"] {{ font-size:12px !important; }}
     .stPlotlyChart {{ touch-action: pan-y !important; }}
 
+
+    /* Productividad - diseño ejecutivo */
+    .prod-summary {
+        background:#10245F;
+        color:#FFFFFF;
+        border-radius:18px;
+        padding:22px 26px;
+        margin:10px 0 22px 0;
+        box-shadow:0 16px 34px rgba(16,36,95,.16);
+    }
+    .prod-summary h3 {
+        margin:0;
+        color:#FFFFFF;
+        font-size:26px;
+        font-weight:900;
+    }
+    .prod-summary p {
+        color:rgba(255,255,255,.78);
+        margin:6px 0 0 0;
+        font-size:14px;
+    }
+    .prod-mini-grid {
+        display:grid;
+        grid-template-columns:repeat(4, minmax(160px, 1fr));
+        gap:14px;
+        margin-top:18px;
+    }
+    .prod-mini-card {
+        background:rgba(255,255,255,.10);
+        border:1px solid rgba(255,255,255,.18);
+        border-radius:14px;
+        padding:13px 15px;
+    }
+    .prod-mini-card .label {
+        color:rgba(255,255,255,.70);
+        font-size:12px;
+        font-weight:800;
+    }
+    .prod-mini-card .value {
+        color:#FFFFFF;
+        font-size:24px;
+        font-weight:900;
+        margin-top:6px;
+    }
+    .prod-section-card {
+        background:#FFFFFF;
+        border:1px solid #D9E2F0;
+        border-radius:16px;
+        padding:18px;
+        box-shadow:0 10px 24px rgba(16,36,95,.06);
+        margin-top:18px;
+    }
+    .prod-section-title {
+        color:#10245F;
+        font-size:18px;
+        font-weight:900;
+        margin-bottom:6px;
+    }
+    .prod-section-sub {
+        color:#6B7280;
+        font-size:13px;
+        margin-bottom:14px;
+    }
+
     @media (max-width:1200px) {{
         .top-header {{ grid-template-columns:110px 1fr; }}
         .header-controls {{ display:none; }}
@@ -2008,64 +2072,225 @@ def recuperacion():
 
 def productividad_page():
     section("Productividad", "Top colaboradores e índice de actividades por colaborador.")
-    c1, c2 = st.columns([1, 1])
-    with c1:
-        fecha_ini = st.date_input("Fecha inicio", value=(pd.Timestamp.today() - pd.Timedelta(days=30)).date(), key="prod_ini")
-    with c2:
-        fecha_fin = st.date_input("Fecha final", value=pd.Timestamp.today().date(), key="prod_fin")
+
+    if op_all is None or op_all.empty:
+        st.warning("No se detectó información operativa en la hoja Resultados productividad.")
+        return
 
     op_p = op_all.copy()
-    if not op_p.empty and "Fecha" in op_p:
-        op_p = op_p[
-            (pd.to_datetime(op_p["Fecha"], errors="coerce").dt.date >= fecha_ini)
-            & (pd.to_datetime(op_p["Fecha"], errors="coerce").dt.date <= fecha_fin)
-        ]
+    if "Fecha" not in op_p:
+        st.warning("No se detectó columna de fecha para calcular productividad por periodo.")
+        return
 
-    prod = productividad(op_p)
-    pdf_placeholder("Productividad")
-    c1, c2 = st.columns([.9, 1.1])
+    op_p["Fecha"] = pd.to_datetime(op_p["Fecha"], errors="coerce")
+    op_p = op_p[op_p["Fecha"].notna()].copy()
+
+    if op_p.empty:
+        st.warning("No hay fechas válidas para productividad.")
+        return
+
+    if "Tienda" in op_p:
+        op_p["Tienda"] = op_p["Tienda"].map(canon_tienda)
+
+    # Asociar nombres cortos contra plantilla cuando exista.
+    if "Nombre" in op_p:
+        op_p["Nombre Base"] = op_p["Nombre"].astype(str).str.strip()
+        # Reglas solicitadas por el usuario.
+        alias = {
+            "ELO": "Eloisa Flores Camacho",
+            "ELOISA": "Eloisa Flores Camacho",
+            "IVON": "Ivonne Torres Garduño",
+            "IVONNE": "Ivonne Torres Garduño",
+        }
+        op_p["Nombre"] = op_p["Nombre Base"].apply(
+            lambda x: alias.get(norm_text(x), x)
+        )
+
+    # Filtros: periodo tipo calendario + tienda.
+    min_date = op_p["Fecha"].min().date()
+    max_date = op_p["Fecha"].max().date()
+
+    c1, c2 = st.columns([2, 2])
     with c1:
-        panel("Top colaboradores", prod, height=430, editable=is_admin)
+        periodo = st.date_input(
+            "Periodo",
+            value=(min_date, max_date),
+            min_value=min_date,
+            max_value=max_date,
+            key="prod_periodo_calendario",
+        )
     with c2:
-        st.markdown('<div class="panel"><div class="panel-title">Top colaboradores</div>', unsafe_allow_html=True)
-        if not prod.empty:
-            name_col = "Nombre" if "Nombre" in prod else "Tienda"
-            p = prod.head(15).sort_values("Productividad")
-            fig = px.bar(p, x="Productividad", y=name_col, orientation="h", text="Productividad")
-            fig.update_layout(height=430)
-            st.plotly_chart(fig, width="stretch")
-        else:
-            st.info("Sin información.")
-        st.markdown("</div>", unsafe_allow_html=True)
+        tiendas_disp = sorted([t for t in op_p["Tienda"].dropna().astype(str).unique().tolist() if t and not t.isdigit()]) if "Tienda" in op_p else []
+        tienda_sel = st.multiselect(
+            "Tienda",
+            tiendas_disp,
+            default=[],
+            placeholder="Todas las tiendas",
+            key="prod_tienda_filtro",
+        )
 
-    section("Índice de actividades por colaborador", "Filtro por periodo y tienda.")
-    c3, c4, c5 = st.columns([1, 1, 2])
-    with c3:
-        idx_ini = st.date_input("Inicio índice", value=fecha_ini, key="idx_ini")
-    with c4:
-        idx_fin = st.date_input("Fin índice", value=fecha_fin, key="idx_fin")
-    with c5:
-        idx_tiendas = st.multiselect("Tienda índice", project_stores, placeholder="Todas las tiendas del proyecto", key="idx_tiendas")
-
-    idx = op_all.copy()
-    if not idx.empty and "Fecha" in idx:
-        idx = idx[
-            (pd.to_datetime(idx["Fecha"], errors="coerce").dt.date >= idx_ini)
-            & (pd.to_datetime(idx["Fecha"], errors="coerce").dt.date <= idx_fin)
-        ]
-    if idx_tiendas and not idx.empty and "Tienda" in idx:
-        idx = idx[idx["Tienda"].isin(idx_tiendas)]
-    if not idx.empty:
-        index_df = idx.groupby(["Tienda", "Nombre", "Actividad Realizada"], dropna=False).agg(
-            Registros=("Actividad Realizada", "count"),
-            Piezas=("Número de Piezas", "sum"),
-            Acondicionado=("Acondicionado", "sum"),
-            Ubicado=("Ubicado", "sum"),
-        ).reset_index()
+    # Aplicar periodo.
+    if isinstance(periodo, tuple) and len(periodo) == 2:
+        f_ini, f_fin = periodo
     else:
-        index_df = pd.DataFrame()
-    panel("Índice de actividades", index_df, height=430, editable=is_admin)
-    excel_button(index_df, "indice_actividades_colaborador.xlsx")
+        f_ini = f_fin = periodo
+
+    f_ini = pd.to_datetime(f_ini)
+    f_fin = pd.to_datetime(f_fin)
+    op_p = op_p[(op_p["Fecha"] >= f_ini) & (op_p["Fecha"] <= f_fin + pd.Timedelta(days=1) - pd.Timedelta(seconds=1))]
+
+    if tienda_sel and "Tienda" in op_p:
+        op_p = op_p[op_p["Tienda"].isin(tienda_sel)]
+
+    if op_p.empty:
+        st.info("No hay información de productividad con los filtros seleccionados.")
+        return
+
+    # Columnas base.
+    piezas = "Número de Piezas" if "Número de Piezas" in op_p.columns else None
+    actividad = "Actividad Realizada" if "Actividad Realizada" in op_p.columns else None
+    nombre = "Nombre" if "Nombre" in op_p.columns else None
+    tienda = "Tienda" if "Tienda" in op_p.columns else None
+
+    if not nombre or not piezas:
+        st.warning("Faltan columnas necesarias para productividad: Nombre y Número de Piezas.")
+        return
+
+    op_p[piezas] = pd.to_numeric(op_p[piezas], errors="coerce").fillna(0)
+
+    # Productividad por colaborador.
+    group_cols = [nombre]
+    if tienda:
+        group_cols.append(tienda)
+
+    prod_df = (
+        op_p.groupby(group_cols, dropna=False)
+        .agg(
+            Piezas=(piezas, "sum"),
+            Registros=(piezas, "count"),
+            Dias=("Fecha", lambda s: max(s.dt.date.nunique(), 1)),
+        )
+        .reset_index()
+    )
+
+    prod_df["Productividad diaria"] = (prod_df["Piezas"] / prod_df["Dias"]).round(1)
+    prod_df["Meta diaria"] = float(goals.get("productividad_diaria", 784))
+    prod_df["% Cumplimiento"] = (prod_df["Productividad diaria"] / prod_df["Meta diaria"] * 100).round(1)
+    prod_df = prod_df.sort_values(["Productividad diaria", "Piezas"], ascending=False)
+
+    total_piezas = float(prod_df["Piezas"].sum())
+    total_colabs = int(prod_df[nombre].nunique())
+    prom_prod = float(prod_df["Productividad diaria"].mean()) if not prod_df.empty else 0
+    cumplimiento_prom = float(prod_df["% Cumplimiento"].mean()) if not prod_df.empty else 0
+
+    st.markdown(f"""
+    <div class="prod-summary">
+        <h3>Productividad por colaborador</h3>
+        <p>Periodo consultado: {f_ini.strftime('%d/%m/%Y')} al {f_fin.strftime('%d/%m/%Y')}</p>
+        <div class="prod-mini-grid">
+            <div class="prod-mini-card"><div class="label">Colaboradores</div><div class="value">{total_colabs:,}</div></div>
+            <div class="prod-mini-card"><div class="label">Piezas procesadas</div><div class="value">{total_piezas:,.0f}</div></div>
+            <div class="prod-mini-card"><div class="label">Productividad prom.</div><div class="value">{prom_prod:,.1f}</div></div>
+            <div class="prod-mini-card"><div class="label">% Cumplimiento</div><div class="value">{cumplimiento_prom:,.1f}%</div></div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    pdf_placeholder("Productividad", df=prod_df, resumen={
+        "Colaboradores": total_colabs,
+        "Piezas procesadas": fmt_num(total_piezas),
+        "Productividad promedio": f"{prom_prod:,.1f}",
+        "% Cumplimiento": f"{cumplimiento_prom:,.1f}%",
+    })
+
+    # TOP colaboradores
+    st.markdown("""
+    <div class="prod-section-card">
+        <div class="prod-section-title">Top colaboradores</div>
+        <div class="prod-section-sub">Ranking por productividad diaria dentro del periodo seleccionado.</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    top_df = prod_df.head(15).copy()
+    safe_df(top_df, height=430, editable=is_admin)
+
+    if not top_df.empty:
+        fig = go.Figure()
+        fig.add_trace(go.Bar(
+            x=top_df["Productividad diaria"],
+            y=top_df[nombre],
+            orientation="h",
+            name="Productividad diaria",
+            text=top_df["Productividad diaria"],
+            textposition="auto",
+        ))
+        fig.update_layout(
+            height=520,
+            margin=dict(l=10, r=10, t=30, b=20),
+            yaxis=dict(autorange="reversed"),
+            xaxis_title="Piezas por día",
+            plot_bgcolor="white",
+            paper_bgcolor="white",
+            dragmode=False,
+        )
+        fig.update_xaxes(fixedrange=True, gridcolor="#E5E7EB")
+        fig.update_yaxes(fixedrange=True)
+        st.plotly_chart(fig, width="stretch", config={
+            "scrollZoom": False,
+            "displayModeBar": False,
+            "doubleClick": False,
+            "responsive": True,
+        })
+
+    # Índice de actividades por colaborador.
+    st.markdown("""
+    <div class="prod-section-card">
+        <div class="prod-section-title">Índice de actividades por colaborador</div>
+        <div class="prod-section-sub">Distribución de piezas por actividad, colaborador y tienda.</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    if actividad:
+        idx = (
+            op_p.groupby(([tienda] if tienda else []) + [nombre, actividad], dropna=False)
+            .agg(Piezas=(piezas, "sum"), Registros=(piezas, "count"))
+            .reset_index()
+        )
+        total_por_colab = idx.groupby(nombre)["Piezas"].transform("sum")
+        idx["% Participación"] = (idx["Piezas"] / total_por_colab.replace(0, np.nan) * 100).fillna(0).round(1)
+        idx = idx.sort_values([nombre, "Piezas"], ascending=[True, False])
+        safe_df(idx, height=520, editable=is_admin)
+
+        # Gráfico apilado por actividad
+        top_names = prod_df.head(10)[nombre].tolist()
+        idx_chart = idx[idx[nombre].isin(top_names)].copy()
+        if not idx_chart.empty:
+            fig2 = px.bar(
+                idx_chart,
+                x=nombre,
+                y="Piezas",
+                color=actividad,
+                title="Actividades por colaborador - Top 10",
+            )
+            fig2.update_layout(
+                height=480,
+                margin=dict(l=10, r=10, t=45, b=110),
+                plot_bgcolor="white",
+                paper_bgcolor="white",
+                dragmode=False,
+            )
+            fig2.update_xaxes(tickangle=-35, fixedrange=True)
+            fig2.update_yaxes(fixedrange=True, gridcolor="#E5E7EB")
+            st.plotly_chart(fig2, width="stretch", config={
+                "scrollZoom": False,
+                "displayModeBar": False,
+                "doubleClick": False,
+                "responsive": True,
+            })
+    else:
+        st.warning("No se detectó la columna Actividad Realizada para generar el índice de actividades.")
+
+    excel_button(prod_df, "productividad_top_colaboradores.xlsx")
 
 def recorridos_page():
     section("Recorridos", "Meta vs real.")

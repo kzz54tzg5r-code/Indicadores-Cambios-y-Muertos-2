@@ -1,3 +1,10 @@
-# v8.8 PDF/graficos/devoluciones
+# v8.8.1 Productividad propuesta
 
-PDF válido, gráficos sin zoom táctil, menú compacto y lectura de Dev Pzs por hojas mensuales.
+Cambio solicitado únicamente en Productividad:
+- Filtro de periodo tipo calendario.
+- Filtro por tienda.
+- Top colaboradores.
+- Índice de actividades por colaborador.
+- Diseño ejecutivo propuesto.
+- PDF de Productividad con resumen y tabla.
+- Gráficas sin zoom accidental.
